@@ -4,7 +4,7 @@
             [clojure.string :as str])
   (:import [org.apache.commons.validator.routines UrlValidator]))
 
-(defn- valid-url?
+(defn valid-url?
   [^String s]
   (and (string? s)
        (.isValid (UrlValidator/getInstance) s)))
@@ -88,7 +88,7 @@
    [:name :keyword]
    [:path
     [:vector
-     [:or :keyword [:fn {:error/message "operation-path must be a non-blank string"} not-blank-str?]]]]
+     [:or :keyword [:fn {:error/message "each segment in operation-path must be a non-blank string"} not-blank-str?]]]]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:expected-status {:optional true} [:vector [:int {:min 100 :max 599}]]]
    [:base-headers {:optional true} [:map-of :string [:or :keyword :string :int]]]
@@ -99,7 +99,7 @@
    [:domain :qualified-keyword]
    [:base-url [:fn {:error/message "base-url must be a valid URL"} valid-url?]]
    [:http-client-fn [:fn {:error/message "http-client-fn must be a Clojure function"} fn?]]
-   [:middlewares [:vector [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
+   [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
    [:auth
     [:vector #'auth-schema]]
    [:policies {:optional true} #'policies-schema]

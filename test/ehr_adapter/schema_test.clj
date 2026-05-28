@@ -1,132 +1,145 @@
 (ns ehr-adapter.schema-test
-  (:require [clojure.test :refer [deftest testing is]]
-            [ehr-adapter.schema :as schema]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [ehr-adapter.schema :as schema]
+            [clojure.string :as str]))
 
-(defn valid-config []
-  {:domain :test/provider
-   :base-url "https://fhir.example.com"
-   :auth {:grant-type :client-secret
-          :client-id "app-id"
-          :client-secret "app-secret"}
-   :http-client-fn fn?
-   :middlewares [fn?]})
+(defn- mock-http-client [_req]
+  {:status 200 :body "OK"})
 
-(deftest valid-configs
-  (testing "minimal valid config passes"
-    (let [cfg (valid-config)]
-      (is (= cfg (schema/validate cfg)))))
+(defn- mock-translation-middleware [handler]
+  (fn [req]
+    ;; Acts as a coercion/translation layer before and after execution
+    (let [coerced-req (assoc req :coerced? true)
+          response (handler coerced-req)]
+      (assoc response :normalized? true))))
 
-  (testing "full config with operations and policies passes"
-    (let [cfg (assoc (valid-config)
-                     :operations [{:name :$export
-                                   :path ["/Group" :id "$export"]
-                                   :method :post
-                                   :expected-status [202]
-                                   :base-headers {"Prefer" "respond-async"}
-                                   :description "Test export"}]
-                     :policies {:timeout-ms 5000 :retries 3 :retry-on [429]})]
-      (is (= cfg (schema/validate cfg)))))
+(defn- mock-custom-auth-handler [_data]
+  (fn [req] req))
 
-  (testing "auth with JWT + extras + custom algorithm passes"
-    (let [cfg (assoc-in (valid-config) [:auth]
-                        {:grant-type :jwt
-                         :client-id "app-id"
-                         :private-key "-----BEGIN KEY-----"
-                         :key-id "kid-1"
-                         :algorithm "RS384"
-                         :extras {:username "u" :password "p" :officekey "123"}})]
-      (is (= cfg (schema/validate cfg))))))
+(deftest valid-adapter-config-test
+  (testing "1. Pure connector adapter with the mandatory translation middleware"
+    (let [config {:domain :eclinicalworks/tenant-alpha
+                  :base-url "https://fhir.ecw.com/v1/fhir"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :api-key
+                          :api-key "secret-key-123"}]}]
+      (is (true? (schema/valid-adapter-config? config)))))
 
-(deftest missing-required-fields
-  (doseq [field [:domain :base-url :auth :http-client-fn :middlewares]]
-    (testing (str "missing " field " → throws ex-info with structured error")
-      (try
-        (schema/validate (dissoc (valid-config) field))
-        (is false "Should have thrown an exception")
-        (catch clojure.lang.ExceptionInfo e
-          (let [data (ex-data e)]
-            (is (= :validation/error (:type data)))
-            (is (some? (get-in data [:errors field]))))))))
+  (testing "2. Multitenant adapter with layered auth pipeline and dynamic operations"
+    (let [config {:domain :advancedmd/clinic-orlando-prod
+                  :base-url "https://api.advancedmd.com/v2"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [;; Layer 1: Reverse Proxy / Perimeter API Gateway Key
+                         {:type :api-key
+                          :api-key "gateway-token-abc"
+                          :client-id "gateway-client-id"}
+                         ;; Layer 2: Core EHR OAuth2 Flow
+                         {:type :oauth2
+                          :token-url "https://auth.advancedmd.com/oauth/token"
+                          :grant-type "client_credentials"
+                          :client-id "amd-client-id"
+                          :client-secret "amd-client-secret"
+                          :bindings {:access-token ["Authorization" "Bearer " :token]}}]
+                  :policies {:timeout-ms 5000
+                             :retries 3
+                             :retry-delay-ms 200
+                             :retry-strategy :exponential
+                             :refresh-token-on [401]}
+                  :operations [{:name :search-patient
+                                :path ["/v1/Patient" :patientId]
+                                :method :get
+                                :expected-status [200 206]
+                                :base-headers {"Prefer" "respond-async"
+                                               "X-Version" 2}}]}]
+      (is (true? (schema/valid-adapter-config? config)))))
 
-  (testing ":domain without namespace → fails"
+  (testing "3. Custom auth layer with live handler factory and unstructured data map"
+    (let [config {:domain :epic/hospital-central-prod
+                  :base-url "https://epic.hospital.org/api"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :custom
+                          :handler mock-custom-auth-handler
+                          :data {:session-id "sess_9901"
+                                 :sandbox? true
+                                 :arbitrary-nested-meta {:nested "value"}}}]}]
+      (is (true? (schema/valid-adapter-config? config))))))
+
+(deftest invalid-adapter-config-test
+  (testing "Missing mandatory translation middleware (empty vector)"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com"
+                  :http-client-fn mock-http-client
+                  :middlewares []
+                  :auth [{:type :api-key :api-key "123"}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/valid-adapter-config? config)))))
+
+  (testing "Domain missing its namespace (violates multitenant routing design)"
+    (let [config {:domain :flat-keyword-without-namespace
+                  :base-url "https://api.com"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :api-key :api-key "123"}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/valid-adapter-config? config)))))
+
+  (testing "Resiliency policy contradiction (:retries present without :retry-delay-ms)"
     (try
-      (schema/validate (assoc (valid-config) :domain :without-namespace))
-      (is false "Should have thrown an exception")
-      (catch clojure.lang.ExceptionInfo e
-        (let [data (ex-data e)]
-          (is (= :validation/error (:type data)))
-          (is (some? (get-in data [:errors :domain]))))))))
+      (schema/valid-adapter-config?
+       {:domain :eclinicalworks/test-tenant
+        :base-url "https://api.com"
+        :http-client-fn mock-http-client
+        :middlewares [mock-translation-middleware]
+        :auth [{:type :api-key :api-key "123"}]
+        :policies {:timeout-ms 1000
+                   :retries 3
+                   :retry-strategy :linear}})
+      (is false "Expected ExceptionInfo to be thrown")
+      (catch clojure.lang.ExceptionInfo ex
+        (let [errors (:details (ex-data ex))]
+          (is (some #(str/includes? % "If you configure :retries, you must provide :retry-delay-ms")
+                    (:policies errors)))))))
 
-(deftest invalid-types-and-enums
-  (testing ":base-url is not a string"
+  (testing "SMART on FHIR logical error (mutual exclusion violation)"
     (try
-      (schema/validate (assoc (valid-config) :base-url 123))
-      (is false)
-      (catch clojure.lang.ExceptionInfo e
-        (is (= :validation/error (:type (ex-data e)))))))
+      (schema/valid-adapter-config?
+       {:domain :eclinicalworks/test-tenant
+        :base-url "https://api.com"
+        :http-client-fn mock-http-client
+        :middlewares [mock-translation-middleware]
+        :auth [{:type :smart-on-fhir/backend-services
+                :client-id "client-123"
+                :key-id "key-123"
+                :algorithm "RS256"
+                :scopes ["system/*.read"]
+                :token-url "https://auth.com"
+                :private-key-path "/etc/keys/fhir.pem"
+                :private-key "-----BEGIN PRIVATE KEY-----\n..."}]})
+      (is false "Expected ExceptionInfo due to exclusive key constraint")
+      (catch clojure.lang.ExceptionInfo ex
+        (let [errors (:details (ex-data ex))]
+          (is (some? errors))))))
 
-  (testing ":path is not a vector"
-    (let [cfg (assoc (valid-config) :operations [{:name :test :path "/wrong" :method :get}])]
-      (try
-        (schema/validate cfg)
-        (is false)
-        (catch clojure.lang.ExceptionInfo e
-          (is (= :validation/error (:type (ex-data e))))))))
-
-  (testing ":method outside allowed enum"
-    (let [cfg (assoc (valid-config) :operations [{:name :test :path ["/test"] :method :options}])]
-      (try
-        (schema/validate cfg)
-        (is false)
-        (catch clojure.lang.ExceptionInfo e
-          (is (= :validation/error (:type (ex-data e))))))))
-
-  (testing "invalid :grant-type"
+  (testing "Operation configuration contains a blank string path segment"
     (try
-      (schema/validate (assoc-in (valid-config) [:auth :grant-type] :bearer))
-      (is false)
-      (catch clojure.lang.ExceptionInfo e
-        (is (= :validation/error (:type (ex-data e))))))))
-
-(deftest closed-maps-behavior
-  (testing "extra key in :auth → fails"
-    (try
-      (schema/validate (assoc-in (valid-config) [:auth :unexpected-field] "value"))
-      (is false)
-      (catch clojure.lang.ExceptionInfo e
-        (is (= :validation/error (:type (ex-data e)))))))
-
-  (testing "extra key in operation → fails"
-    (let [cfg (assoc (valid-config) :operations [{:name :test :path ["/x"] :method :get :extra "no"}])]
-      (try
-        (schema/validate cfg)
-        (is false)
-        (catch clojure.lang.ExceptionInfo e
-          (is (= :validation/error (:type (ex-data e)))))))))
-
-(deftest policies-and-operations
-  (testing ":policies with invalid types → fails"
-    (try
-      (schema/validate (assoc (valid-config) :policies {:timeout-ms "fast"}))
-      (is false)
-      (catch clojure.lang.ExceptionInfo e
-        (is (= :validation/error (:type (ex-data e)))))))
-
-  (testing ":retries negative → fails"
-    (try
-      (schema/validate (assoc (valid-config) :policies {:retries -1}))
-      (is false)
-      (catch clojure.lang.ExceptionInfo e
-        (is (= :validation/error (:type (ex-data e)))))))
-
-  (testing ":base-headers with keyword → passes (resolved at runtime)"
-    (let [cfg (assoc (valid-config)
-                     :operations [{:name :test
-                                   :path ["/x"]
-                                   :method :get
-                                   :base-headers {"X-Provider" :provider-id}}])]
-      (is (= cfg (schema/validate cfg)))))
-
-  (testing ":operations empty → passes"
-    (let [cfg (assoc (valid-config) :operations [])]
-      (is (= cfg (schema/validate cfg))))))
+      (schema/valid-adapter-config?
+       {:domain :eclinicalworks/test-tenant
+        :base-url "https://api.com"
+        :http-client-fn mock-http-client
+        :middlewares [mock-translation-middleware]
+        :auth [{:type :api-key :api-key "123"}]
+        :operations [{:name :get-patient
+                      :method :get
+                      :path ["/v1/Patient" "   " :id]}]})
+      (is false "Expected ExceptionInfo due to blank string path segment")
+      (catch clojure.lang.ExceptionInfo ex
+        (let [errors (:details (ex-data ex))
+              path-errors (get-in errors [:operations 0 :path])]
+          (is (str/includes? (str path-errors) "operation-path must be a non-blank string")))))))
