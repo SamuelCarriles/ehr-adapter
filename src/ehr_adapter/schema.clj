@@ -1,6 +1,5 @@
 (ns ehr-adapter.schema
   (:require [malli.core :as m]
-            [malli.util :as mu]
             [malli.error :as me]
             [clojure.string :as str])
   (:import [org.apache.commons.validator.routines UrlValidator]))
@@ -24,7 +23,7 @@
 
 (def smart-auth
   [:and
-   [:fn (fn [m] (= 1 (count (keep m [:private-key-path :private-key]))))]
+   [:fn {:error/message "exactly one of :private-key or :private-key-path must be provided"} (fn [{:keys [private-key private-key-path]}] (= (nil? private-key) (not (nil? private-key-path))))]
    [:map
     [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
     [:private-key-path {:optional true} [:fn {:error/message "private-key-path must be a non-blank string"} not-blank-str?]]
@@ -55,7 +54,7 @@
    [:data [:map-of :any :any]]])
 
 (def auth-schema
-  (mu/merge
+  [:and
    [:map
     [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :api-key :custom]]
     [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]]
@@ -64,13 +63,13 @@
     [:smart-on-fhir/backend-services #'smart-auth]
     [:oauth2 #'oauth2-auth]
     [:api-key #'api-key-auth]
-    [:custom #'custom-auth]]))
+    [:custom #'custom-auth]]])
 
 (def policies-schema
   [:and
    [:fn {:error/message "If you configure :retries, you must provide :retry-delay-ms"}
     (fn [{:keys [retries retry-delay-ms]}]
-      (if retries (not (nil? retry-delay-ms)) true))]
+      (= (nil? retries) (nil? retry-delay-ms)))]
 
    [:map
     [:timeout-ms {:optional true} [:int {:min 1}]]
@@ -89,11 +88,11 @@
    [:name :keyword]
    [:path
     [:vector
-     [:or :keyword [:string [:fn {:error/message "operation-path must be a non-blank string"} not-blank-str?]]]]]
+     [:or :keyword [:fn {:error/message "operation-path must be a non-blank string"} not-blank-str?]]]]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:expected-status {:optional true} [:vector [:int {:min 100 :max 599}]]]
    [:base-headers {:optional true} [:map-of :string [:or :keyword :string :int]]]
-   [:description {:optional true} [:string [:fn {:error/message "operation-description must be a non-blank string"} not-blank-str?]]]])
+   [:description {:optional true} [:fn {:error/message "operation-description must be a non-blank string"} not-blank-str?]]])
 
 (def adapter-schema
   [:map {:closed true}
