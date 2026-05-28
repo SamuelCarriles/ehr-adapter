@@ -1,0 +1,1 @@
+(ns ehr-adapter.core)
