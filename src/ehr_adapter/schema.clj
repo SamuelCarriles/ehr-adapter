@@ -30,7 +30,7 @@
     [:private-key {:optional true} [:fn {:error/message "private-key must be a non-blank string"} not-blank-str?]]
     [:key-id [:fn {:error/message "key-id must be a non-blank string"} not-blank-str?]]
     [:algorithm [:fn {:error/message "algorithm must be a non-blank string"} not-blank-str?]]
-    [:audience {:optional true} [:fn {:error/message "audience must be a valid URL"} valid-url?]]
+    [:audience [:fn {:error/message "audience must be a valid URL"} valid-url?]]
     [:scopes [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
     [:token-url [:fn {:error/message "token-url must be a valid URL"} valid-url?]]]])
 
@@ -40,7 +40,7 @@
    [:grant-type [:fn {:error/message "grant-type must be a non-blank string"} not-blank-str?]]
    [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
    [:client-secret [:fn {:error/message "client-secret must be a non-blank string"} not-blank-str?]]
-   [:scope {:optional true} [:fn {:error/message "scope must be a non-blank string"} not-blank-str?]]
+   [:scopes {:optional true} [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
    [:payload {:optional true} [:map-of :keyword :any]]])
 
 (def api-key-auth
