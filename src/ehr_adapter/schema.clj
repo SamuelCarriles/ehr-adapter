@@ -65,7 +65,7 @@
     [:api-key #'api-key-auth]
     [:custom #'custom-auth]]])
 
-(def policies-schema
+(def network-config-schema
   [:and
    [:fn {:error/message "If you configure :retries, you must provide :retry-delay-ms"}
     (fn [{:keys [retries retry-delay-ms]}]
@@ -102,7 +102,7 @@
    [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
    [:auth
     [:vector #'auth-schema]]
-   [:policies {:optional true} #'policies-schema]
+   [:network-config {:optional true} #'network-config-schema]
    [:operations {:optional true}
     [:vector #'operation-schema]]])
 

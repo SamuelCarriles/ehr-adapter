@@ -26,33 +26,27 @@
                           :api-key "secret-key-123"}]}]
       (is (true? (schema/valid-adapter-config? config)))))
 
-  (testing "2. Multitenant adapter with layered auth pipeline and dynamic operations"
-    (let [config {:domain :advancedmd/clinic-orlando-prod
-                  :base-url "https://api.advancedmd.com/v2"
+  (testing "2. Multitenant adapter with standard OAuth2 credentials pipeline and dynamic operations"
+    (let [config {:domain :eclinicalworks/tenant-beta
+                  :base-url "https://api.eclinicalworks.com/v2"
                   :http-client-fn mock-http-client
                   :middlewares [mock-translation-middleware]
-                  :auth [;; Layer 1: Reverse Proxy / Perimeter API Gateway Key
-                         {:type :api-key
-                          :api-key "gateway-token-abc"
-                          :client-id "gateway-client-id"}
-                         ;; Layer 2: Core EHR OAuth2 Flow
-                         {:type :oauth2
-                          :token-url "https://auth.advancedmd.com/oauth/token"
-                          :grant-type "client_credentials"
-                          :client-id "amd-client-id"
-                          :client-secret "amd-client-secret"
-                          :bindings {:access-token ["Authorization" "Bearer " :token]}}]
-                  :policies {:timeout-ms 5000
-                             :retries 3
-                             :retry-delay-ms 200
-                             :retry-strategy :exponential
-                             :refresh-token-on [401]}
+                  :auth [;; Layer 1: Standard Core EHR OAuth2 Flow (Cumple el estándar estricto)
+                         {:type          :oauth2
+                          :token-url     "https://auth.eclinicalworks.com/oauth/token"
+                          :grant-type    "client_credentials"
+                          :client-id     "ecw-client-id-prod"
+                          :client-secret "ecw-client-secret-secure-123"}]
+                  :network-config {:timeout-ms 5000
+                                   :retries 3
+                                   :retry-delay-ms 200
+                                   :retry-strategy :exponential
+                                   :refresh-token-on [401]}
                   :operations [{:name :search-patient
-                                :path ["/v1/Patient" :patientId]
+                                :path ["v1/Patient" :ref/patientId]
                                 :method :get
                                 :expected-status [200 206]
-                                :base-headers {"Prefer" "respond-async"
-                                               "X-Version" 2}}]}]
+                                :base-headers {"Prefer" "respond-async"}}]}]
       (is (true? (schema/valid-adapter-config? config)))))
 
   (testing "3. Custom auth layer with live handler factory and unstructured data map"
@@ -98,14 +92,15 @@
         :http-client-fn mock-http-client
         :middlewares [mock-translation-middleware]
         :auth [{:type :api-key :api-key "123"}]
-        :policies {:timeout-ms 1000
-                   :retries 3
-                   :retry-strategy :linear}})
+
+        :network-config {:timeout-ms 1000
+                         :retries 3
+                         :retry-strategy :linear}})
       (is false "Expected ExceptionInfo to be thrown")
       (catch clojure.lang.ExceptionInfo ex
         (let [errors (:details (ex-data ex))]
           (is (some #(str/includes? % "If you configure :retries, you must provide :retry-delay-ms")
-                    (:policies errors)))))))
+                    (:network-config errors)))))))
 
   (testing "SMART on FHIR logical error (mutual exclusion violation)"
     (try
@@ -137,7 +132,7 @@
         :auth [{:type :api-key :api-key "123"}]
         :operations [{:name :get-patient
                       :method :get
-                      :path ["/v1/Patient" "   " :id]}]})
+                      :path ["v1/Patient" "    " :id]}]})
       (is false "Expected ExceptionInfo due to blank string path segment")
       (catch clojure.lang.ExceptionInfo ex
         (let [errors (:details (ex-data ex))
