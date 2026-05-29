@@ -111,6 +111,25 @@
    [:operations {:optional true}
     [:vector #'Operation]]])
 
+;; =================================================================
+;; AdapterInstance related
+
+(def RunTimeAuth
+  [:map
+   [:state [:fn {:error/message "auth state must be a Clojure Atom (IAtom)"}
+            (fn [s] (instance? clojure.lang.IAtom s))]]
+
+   [:get-token [:fn {:error/message "get-token must be a compiled Clojure function"} fn?]]
+
+   [:config [:vector #'Authentication]]])
+
+(def AdapterInstance
+  [:map {:closed true}
+   [:domain :qualified-keyword]
+   [:base-url [:fn {:error/message "base-url must be a valid URL"} absolute-url?]]
+   [:auth #'RunTimeAuth]
+   [:operations [:map-of :keyword [:fn {:error/message "each operation must be a compiled Clojure function"} fn?]]]])
+
 (defn validate-adapter-config
   [config]
   (if-let [explain (m/explain AdapterConfiguration config)]
@@ -119,3 +138,10 @@
                      :details (me/humanize explain)}))
     config))
 
+(defn validate-adapter-instance
+  [instance]
+  (if-let [explain (m/explain AdapterInstance instance)]
+    (throw (ex-info "Invalid Adapter configuration"
+                    {:type :invalid/schema
+                     :details (me/humanize explain)}))
+    instance))

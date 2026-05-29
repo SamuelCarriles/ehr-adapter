@@ -16,6 +16,18 @@
 (defn- mock-custom-auth-handler [_data]
   (fn [req] req))
 
+(defn- mock-get-token-fn []
+  "mock-bearer-token-123")
+
+(defn- build-mock-instance [config]
+  {:domain    (:domain config)
+   :base-url  (:base-url config)
+   :auth      {:state     (atom {:token "xyz"})
+               :get-token mock-get-token-fn
+               :config    (:auth config)}
+   :operations (into {} (map (fn [op] [(:name op) (fn [data] {:status 200 :executed (:name op) :data data})])
+                             (:operations config)))})
+
 ;; =============================================================================
 ;; Valid Configurations Tests
 ;; =============================================================================
@@ -144,3 +156,47 @@
         (let [errors (:details (ex-data ex))
               path-errors (get-in errors [:operations 0 :path])]
           (is (str/includes? (str path-errors) "each segment in operation-path must be a non-blank string")))))))
+
+;; =============================================================================
+;; AdapterInstance Tests
+;; =============================================================================
+
+(deftest validate-adapter-instance-test
+  (testing "1. Valid instance generated"
+    (let [config {:domain :eclinicalworks/tenant-alpha
+                  :base-url "https://fhir.ecw.com/v1/fhir"
+                  :auth [{:type :api-key :api-key "secret-123"}]
+                  :operations [{:name :search-patient :path ["v1" :id] :method :get}]}
+          instance (build-mock-instance config)]
+
+      (is (= instance (schema/validate-adapter-instance instance)))))
+
+  (testing "2. Error: Fails if :auth :state is not a real IAtom"
+    (let [instance {:domain    :eclinicalworks/tenant-fail
+                    :base-url  "https://fhir.ecw.com/v1/fhir"
+                    :auth      {:state     {:not-an-atom true}
+                                :get-token mock-get-token-fn
+                                :config    [{:type :api-key :api-key "123"}]}
+                    :operations {:search-patient (fn [_] {})}}]
+      (try
+        (schema/validate-adapter-instance instance)
+        (is false "Expected ExceptionInfo to be thrown because :state is not an Atom")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))]
+            (is (some #(str/includes? % "auth state must be a Clojure Atom (IAtom)")
+                      (get-in errors [:auth :state]))))))))
+
+  (testing "3. Error: Fails if an operation member is not an executable function"
+    (let [instance {:domain    :eclinicalworks/tenant-fail
+                    :base-url  "https://fhir.ecw.com/v1/fhir"
+                    :auth      {:state     (atom {})
+                                :get-token mock-get-token-fn
+                                :config    [{:type :api-key :api-key "123"}]}
+                    :operations {:search-patient {:this-is-not "a function"}}}]
+      (try
+        (schema/validate-adapter-instance instance)
+        (is false "Expected ExceptionInfo due to uncompiled operation map")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))
+                op-errors (get-in errors [:operations :search-patient])]
+            (is (str/includes? (str op-errors) "each operation must be a compiled Clojure function"))))))))
