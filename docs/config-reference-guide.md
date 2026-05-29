@@ -1,60 +1,81 @@
 # Configuration Reference Guide: `ehr-adapter`
 
-This guide details how to compose the configuration map required to initialize an EHR provider adapter. In `ehr-adapter`, everything —from authentication mechanics to endpoint paths— is defined using native Clojure data structures.
+This guide explains how to build the configuration map needed to connect your system to an Electronic Health Record (EHR) provider using `ehr-adapter`. In this library, everything is configured using plain Clojure data structures (maps, vectors, and keywords).
 
 ## The Root Configuration Map
 
-The configuration is a single Clojure map containing the core infrastructure definitions, the sequential authentication layers, resiliency/network policies, and the target endpoints.
+The root configuration is a single Clojure map. Think of it as a complete blueprint that tells the engine where the EHR server lives, how to log in step-by-step, how to handle network errors, and what medical endpoints are available.
 
 ### Fields Matrix
 
-| Key               | Type       | Required | Description & Live Behavior                                                                                                                                                                                                      | Example                                                                   |
-| :---------------- | :--------- | :------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ |
-| `:domain`         | `Keyword`  | **Yes**  | A qualified keyword used to uniquely identify the tenant (clinic/organization) and route traffic cleanly.                                                                                                                        | `:advancedmd/test-sandbox`                                                |
-| `:base-url`       | `String`   | **Yes**  | The root URL of the target EHR provider API server. Used globally to prefix relative operation paths.                                                                                                                            | `"https://providerapi.advancedmd.com"`                                    |
-| `:http-client-fn` | `Function` | **Yes**  | The underlying Clojure HTTP function (e.g., using `clj-http` or `http-kit`) that will execute the actual request.                                                                                                                | `clj-http.client/request`                                                 |
-| `:middlewares`    | `Vector`   | **Yes**  | A vector of functions composing the processing pipeline. Must contain at least one base client adapter middleware (`ehr-adapter.middleware/clj-http-client`) to decouple core data structures from physical network invocations. | `[ehr-adapter.middleware/clj-http-client]`                                |
-| `:auth`           | `Vector`   | **Yes**  | A vector of authentication layer maps executed sequentially. It acts as an isolation pipeline where layers can pass dynamic variables forward.                                                                                   | _(See [Authentication Section](#1-authentication-layers-auth))_           |
-| `:network-config` | `Map`      |    No    | Performance and resilience settings such as timeouts, connection behavior, and retry rules.                                                                                                                                      | _(See [Network Config Section](#2-network-configuration-network-config))_ |
-| `:operations`     | `Vector`   |    No    | A list of available endpoint templates to be compiled into executable higher-order functions by the engine.                                                                                                                      | _(See [Operations Section](#3-endpoint-operations-operations))_           |
+| Key               | Type       | Required | Plain English Description & Live Behavior                                                                                                          | Example                                                                                                    |
+| ----------------- | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `:domain`         | `Keyword`  | **Yes**  | A unique, namespaced keyword identifying this specific clinic or setup. Used internally to route and catalog configurations.                       | `:eclinicalworks/tenant-beta`                                                                              |
+| `:base-url`       | `String`   | **Yes**  | The root web address of the EHR API. **Rule:** Do not add a trailing slash `/` at the end; the path compiler normalizes this automatically.        | `"[https://api.interop-ehr.com/v2](https://api.interop-ehr.com/v2)"`                                       |
+| `:http-client-fn` | `Function` | **Yes**  | The actual Clojure function your application uses to talk to the internet (like `clj-http.client/request` or `http-kit`).                          | `clj-http.client/request`                                                                                  |
+| `:middlewares`    | `Vector`   | **Yes**  | A list of plumbing functions that process data before it goes out. Must contain at least your base client adapter to handle network calls cleanly. | `[ehr-adapter.middleware/clj-http-client]`                                                                 |
+| `:auth`           | `Vector`   | **Yes**  | A step-by-step list of login rules. The engine runs them in order, meaning a later step can use tokens generated by an earlier step.               | _(See [Authentication Layers](https://www.google.com/search?q=%231-authentication-layers-auth))_           |
+| `:network-config` | `Map`      | No       | Settings for safety belts: network timeouts, retries when a server drops, and token refresh thresholds.                                            | _(See [Network Configuration](https://www.google.com/search?q=%232-network-configuration-network-config))_ |
+| `:operations`     | `Vector`   | No       | A list of template paths for pulling clinical data (like Patients or Groups) that the engine turns into real functions.                            | _(See [Endpoint Operations](https://www.google.com/search?q=%233-endpoint-operations-operations))_         |
 
 ## 1. Authentication Layers (`:auth`)
 
-Because EHR authentication often requires multi-step procedures, `:auth` accepts a **sequential vector of maps**. This design operates like a pure data pipeline, allowing intermediate payloads, tokens, or custom data adjustments to feed forward.
+EHR systems rarely let you log in with a single password. Often, you must complete a multi-step handshake. To handle this, `:auth` takes a **sequential vector of maps**. The engine processes each map from top to bottom, passing any temporary cookies or access tokens forward down the line.
 
-### Dynamic Resolution Contract (`:ref/...`)
+### Dynamic Variables (`:ref/...`)
 
-Whenever a field within an auth layer or payload requires data generated at runtime (or from preceding layers), it utilizes a **namespaced keyword** following the strict format `:ref/variable-name`.
-The engine resolves these variables using a fail-fast strategy in this precise lookup priority order:
+If a field needs a value that isn't known until the program runs (like a fresh token from a previous step or a patient ID passed on the fly), use a **namespaced keyword** starting with `:ref/`.
 
-1. **Context Lookup:** Searches for the exact match in the current execution registry context.
-2. **Explicit Bindings Fallback:** If not found directly, it evaluates the `:bindings` dictionary rule mapped against the upstream layer's output map.
-3. **Execution Block:** If the reference remains unresolved, the engine immediately throws an `ex-info` exception to prevent corrupted downstream requests.
+When the engine sees `:ref/my-variable`, it performs a strict lookup:
 
-### Layer Interleaving for Data Transformation
+1. It checks the live memory context for a value named `my-variable`.
+2. If missing, it looks at the extraction instructions you set up in the preceding layer's `:bindings`.
+3. If it still can't find anything, **it halts immediately** and throws a detailed exception to prevent sending corrupted or unauthenticated data to the EHR.
 
-Beyond standard protocol strategies, developers can insert a layer of type `:custom` between any two authentication stages. The sole responsibility of this middleware layer can be transforming, nesting, or flattening the map output from a previous request to ensure it fits the exact structural contract required by the following layer.
+### The Injection Contract: :bindings
 
-### Auth Types & Examples
+The `:bindings` key is declared exclusively within the layer that needs to receive the data. It is a configuration map where the receiving layer tells the engine: "In order for me to construct my request, I need you to go to the global response map, extract a piece of data, and assign it to me locally."
+
+The structure of the map is as follows:
+
+- Key: The internal keyword that this layer will use (for example, `:client_assertion`).
+
+- Value: A standard lookup vector used to extract the data directly from the context (for example, `[:body :access_token]`).
+
+This way, the sending layer does not know—nor does it care—who will consume its data.
+
+### Auth Types & Field Contracts
 
 #### Strategy: `:api-key`
 
-Used for simple static tokens, application keys, or custom header values.
+Used when the EHR or an API Gateway simply requires a static token or an application identifier injected into the request headers.
+
+- **`:type`** `[Required]` Must be exactly `:api-key`.
+- **`:api-key`** `[Required]` The actual string token or secret key.
+- **`:client-id`** _[Optional]_ An optional application identifier string if the gateway asks for a specific app ID alongside the key.
+- **`:bindings`** _[Optional]_ Map used to extract specific data that the handler needs.
 
 ```clojure
 {:type      :api-key
- :api-key   "ewc-prod-38910x-key"
- :client-id "my-application-id"}
+ :api-key   "app-gateway-secure-token-9901"
+ :client-id "integrator-service-id"}
 
 ```
 
 #### Strategy: `:basic-auth`
 
-Standard Username/Password exchanges to obtain short-lived access elements.
+A traditional username and password exchange, typically sent to a login endpoint to obtain a short-lived token.
+
+- **`:type`** `[Required]` Must be exactly `:basic-auth`.
+- **`:token-url`** `[Required]` The full URL address where the engine must send the credentials. **Rule:** Do not add a trailing slash `/`.
+- **`:username`** `[Required]` The client or system username string.
+- **`:password`** `[Required]` The client or system password string.
+- **`:payload`** _[Optional]_ An extra map of key-value parameters to include in the request body (e.g., specifying form fields the EHR requires).
+- **`:bindings`** _[Optional]_ Map used to extract specific data that the handler needs.
 
 ```clojure
 {:type      :basic-auth
- :token-url "[https://api.provider.com/oauth2/token](https://api.provider.com/oauth2/token)"
+ :token-url "https://auth.interop-ehr.com/v2/login"
  :username  "integrator_app"
  :password  "SecurePassword987!"
  :payload   {:grant_type "client_credentials"}}
@@ -63,23 +84,59 @@ Standard Username/Password exchanges to obtain short-lived access elements.
 
 #### Strategy: `:oauth2`
 
-Standard OAuth2 flow for application-to-application server communication, as well as assertions using asymmetric JWT cryptography or proprietary parameters via custom structural payloads.
+The standard industry flow for server-to-server communication (Client Credentials). It is highly flexible; you can pass credentials cleanly or map custom internal structural payloads for unique vendor requirements.
+
+- **`:type`** `[Required]` Must be exactly `:oauth2`.
+- **`:token-url`** `[Required]` The central address of the OAuth2 token server. **Rule:** Do not add a trailing slash `/`.
+- **`:grant-type`** `[Required]` The OAuth2 flow type string. Usually `"client_credentials"`.
+- **`:client-id`** `[Required]` Your application's unique client ID string.
+- **`:client-secret`** `[Required]` Your application's secure client secret string.
+- **`:payload`** _[Optional]_ A map used to inject custom parameters directly into the request body if an EHR implements non-standard token fields.
+- **`:bindings`** _[Optional]_ Map used to extract specific data that the handler needs.
 
 ```clojure
 {:type          :oauth2
- :token-url     "[https://providerapi.advancedmd.com/v1/oauth2/token](https://providerapi.advancedmd.com/v1/oauth2/token)"
+ :token-url     "https://auth.interop-ehr.com/v2/oauth2/token"
  :grant-type    "client_credentials"
- :payload       {:client_assertion      :ref/jwt
-                 :client_assertion_type "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-                 :scope                 "system/*.read"
-                 :username              "AMDTESTER"
-                 :officekey             990191}}
+ :client-id     "client_usr_prod_01x"
+ :client-secret "super-secret-oauth-string-xyz"}
+
+```
+
+#### Strategy: `:smart-on-fhir/backend-services`
+
+The official, ultra-strict security standard for medical software talking server-to-server. Instead of passwords, it secures connections by generating an encrypted, short-lived JSON Web Token (JWT) locally using cryptographic keys.
+
+- **`:type`** `[Required]` Must be exactly `:smart-on-fhir/backend-services`.
+- **`:client-id`** `[Required]` The production client ID string issued to your application by the EHR developer portal.
+- **`:token-url`** `[Required]` The EHR's official token authentication endpoint. **Rule:** Do not add a trailing slash `/`.
+- **`:scopes`** `[Required]` A native **Clojure vector of strings** containing individual permissions (e.g., `["system/Patient.read" "system/Group.read"]`). _The engine automatically joins these with spaces into a single `scope` parameter right before network transmission to match the specification perfectly._
+- **`:private-key-path`** `[Required]` A string path pointing to your local private key file (e.g., `.pem` or `.key`) used to sign the assertion.
+- **`:audience`** `[Required]` The authorization server's identity string (usually identical to the token URL), embedded inside the token signature for validation.
+- **`:key-id`** _[Optional]_ The specific key identifier (`kid`) string matching your registered public key profile in the EHR backend.
+- **`:algorithm`** _[Optional]_ The signing encryption standard keyword or string. Defaults to `"RS256"` if not specified.
+- **`:bindings`** _[Optional]_ Map used to extract specific data that the handler needs.
+
+```clojure
+{:type             :smart-on-fhir/backend-services
+ :client-id        "my-smart-app-id"
+ :token-url        "https://fhir.epic.com/interconnect-fhiroauth/oauth2/token"
+ :scopes           ["system/Group.read" "system/Patient.read"]
+ :private-key-path "resources/keys/production_private.pem"
+ :audience         "https://fhir.epic.com/interconnect-fhiroauth/oauth2/token"
+ :key-id           "prod-key-v1"
+ :algorithm        "RS256"}
 
 ```
 
 #### Strategy: `:custom`
 
-Utilized for legacy, non-standard, or specialized proxy-transformation workflows within the auth sequential pipeline.
+A safety valve map used when an EHR does something entirely proprietary. It lets you run a custom Clojure function to shuffle, transform, or fix data structures mid-pipeline.
+
+- **`:type`** `[Required]` Must be exactly `:custom`.
+- **`:handler`** `[Required]` A reference to a standalone Clojure function that receives the pipeline state and returns a transformed map.
+- **`:data`** _[Optional]_ A custom configuration map passed directly into your handler function as context parameters.
+- **`:bindings`** _[Optional]_ Map used to extract specific data that the handler needs.
 
 ```clojure
 {:type    :custom
@@ -90,36 +147,36 @@ Utilized for legacy, non-standard, or specialized proxy-transformation workflows
 
 ## 2. Network Configuration (`:network-config`)
 
-Controls socket boundaries, network threshold limits, and failure fallback loops for the http client adapter.
+This section acts as your network safety settings, dictating how long the client should wait for a slow EHR server and how to retry safely if a call drops.
 
-> **Co-dependency Rule:** If you configure `:retries`, you **must** configure `:retry-delay-ms` as well. Setting retry cycles without an explicit wait delay threshold is an invalid configuration state.
+> **Co-dependency Rule:** If you turn on `:retries`, you **must** supply a `:retry-delay-ms` value. Attempting to loop retries without a clear resting interval between attempts is an invalid state that will cause the configuration validator to reject the entire map.
 
-| Key                 | Type      | Description                                                                           | Example / Allowed Values    |
-| ------------------- | --------- | ------------------------------------------------------------------------------------- | --------------------------- |
-| `:timeout-ms`       | `Integer` | Maximum network wait threshold in milliseconds before aborting a request.             | `5000`                      |
-| `:retries`          | `Integer` | Maximum number of execution retry attempts upon network-level failure.                | `3`                         |
-| `:retry-delay-ms`   | `Integer` | Base delay interval wait time (in milliseconds) between execution retries.            | `200`                       |
-| `:retry-on`         | `Vector`  | Targeted list of HTTP status codes that automatically trigger a retry cycle.          | `[500 502 503 504]`         |
-| `:retry-strategy`   | `Keyword` | Algorithmic time backoff approach between execution cycles.                           | `:linear` or `:exponential` |
-| `:refresh-token-on` | `Vector`  | HTTP status codes that invalidate token caches and rerun the entire `:auth` pipeline. | `[401]`                     |
+| Key                 | Type      | Required? | Plain English Description & Allowed Values                                                                                                                                                | Example             |
+| ------------------- | --------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `:timeout-ms`       | `Integer` | No        | Maximum time in milliseconds to wait for a server response before giving up and cutting the wire.                                                                                         | `5000`              |
+| `:retries`          | `Integer` | No        | How many times the engine should automatically try the request again if the network drops or throws a server error.                                                                       | `3`                 |
+| `:retry-delay-ms`   | `Integer` | No        | The resting wait time in milliseconds before firing off the next retry attempt.                                                                                                           | `200`               |
+| `:retry-on`         | `Vector`  | No        | A vector of specific HTTP status codes that should trigger a retry attempt.                                                                                                               | `[500 502 503 504]` |
+| `:retry-strategy`   | `Keyword` | No        | The mathematical rhythm of retries. Allowed options: `:linear` (wait exactly the same time every turn) or `:exponential` (double the wait time each failure).                             | `:exponential`      |
+| `:refresh-token-on` | `Vector`  | No        | A vector of HTTP status codes (usually `[401]`) that mean "Our token expired". When hit, the engine clears its cache, re-runs the entire `:auth` list from scratch, and retries the call. | `[401]`             |
 
 ## 3. Endpoint Operations (`:operations`)
 
-Defines the relative endpoint matrices that the compiler engine maps and transforms into fully executable, validated, higher-order Clojure functions.
+Operations are templates for the actual medical data endpoints you want to fetch. The engine reads these data maps and automatically compiles them into fast, fully executable Clojure functions.
 
-- **Relative Isolation Rule:** Paths defined within operations **must not contain the full domain URL**. The compiler engine automatically aggregates segments by resolving them against the root `:base-url` via a safe `str/join` matrix, neutralizing anomalies from leading/trailing slashes.
+> **Relative Path Rule:** Path segments **must be completely clean and relative**. Never write out the full EHR domain URL here. The compiler takes your pieces, strips out any accidental slashes at the beginning or end of strings, and binds them perfectly onto the root `:base-url` with a clean, single separator.
 
-| Key             | Type      | Description & Live Engine Behavior                                                                                                                                                                                                                          | Example                                   |
-| --------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `:name`         | `Keyword` | Unique identifier used by the engine to register, map, and invoke the compiled function.                                                                                                                                                                    | `:$export`                                |
-| `:method`       | `Keyword` | Native HTTP verb/method utilized to transmit the operation over the wire.                                                                                                                                                                                   | `:get`, `:post`, `:patch`, `:delete`      |
-| `:path`         | `Vector`  | Paths parsed by the compiler engine. Literals evaluate as exact matches. Namespaced keywords (e.g., `:ref/group-id`) act as mandatory variable dependencies extracted from the invocation `opts` map. Missing references trigger immediate `ex-info` halts. | `["v1/r4/Group" :ref/group-id "$export"]` |
-| `:base-headers` | `Map`     | Fixed headers injected specifically for this operational endpoint. Can accept `:ref/...` lookups to bind data resolved dynamically at runtime.                                                                                                              | `{"Prefer" "respond-async"}`              |
-| `:description`  | `String`  | Human-readable documentation outlining parameters, usage contracts, or structural purposes.                                                                                                                                                                 | `"Initialize an $export FHIR operation."` |
+| Key             | Type      | Required? | Plain English Description & Live Behavior                                                                                                                                            | Example                                   |
+| --------------- | --------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| `:name`         | `Keyword` | **Yes**   | The unique system keyword used to identify and trigger this function in your application code.                                                                                       | `:$export`                                |
+| `:method`       | `Keyword` | **Yes**   | The network action verb used over the wire. Allowed: `:get`, `:post`, `:put`, `:patch`, `:delete`.                                                                                   | `:get`                                    |
+| `:path`         | `Vector`  | **Yes**   | A clean vector of segments to build the destination URL. String literals are hardcoded. Keywords (like `:ref/group-id`) are variables filled dynamically when you call the function. | `["v1/r4/Group" :ref/group-id "$export"]` |
+| `:base-headers` | `Map`     | No        | Permanent HTTP headers that this specific operation always needs (e.g., custom payload formats or transaction rules). Can contain dynamic `:ref/...` lookups.                        | `{"Prefer" "respond-async"}`              |
+| `:description`  | `String`  | No        | Plain-text documentation explaining the real-world purpose of the endpoint for team readability.                                                                                     | `"Initialize an $export FHIR operation."` |
 
-## Complete Real-World Implementation (Standard Multi-Tenant Enterprise Layout)
+## Complete Real-World Implementation (Standard Enterprise Layout)
 
-The following example showcases a production-grade data adapter layout mapping a rigorous, standard dual-stage authentication pipeline used by modern interoperable EHR systems (e.g., eClinicalWorks or Epic traditional integration endpoints).
+Here is what a complete, valid production blueprint looks like when connecting to a standard interoperable EHR gateway. It uses a clean dual-stage authentication layout (Perimeter Key + Strict OAuth2) and sets up safe routing properties. Notice how **none of the path segments or base URLs use messy trailing or leading slashes**.
 
 ```clojure
 {:domain :provider-group/tenant-alpha
@@ -130,25 +187,31 @@ The following example showcases a production-grade data adapter layout mapping a
 
  :middlewares [ehr-adapter.middleware/clj-http-client]
 
- :auth [{:type      :api-key
+ :auth [;; Layer 1: Secure Perimeter API Gateway
+        {:type      :api-key
          :api-key   "app-gateway-secure-token-9901"
          :client-id "integrator-service-id"}
 
+        ;; Layer 2: Standard Core OAuth2 Client Credentials Flow
         {:type          :oauth2
+         :bindings {:secret [:client :secret]}
          :token-url     "https://auth.interop-ehr.com/v2/oauth2/token"
          :grant-type    "client_credentials"
          :client-id     "client_usr_prod_01x"
-         :client-secret "super-secret-oauth-string-xyz"
-         :scope         "system/Group.read system/Patient.read"}]
+         :client-secret :ref/secret}]
 
  :network-config {:timeout-ms     5000
                   :retries        3
-                  :retry-delay-ms 200}
+                  :retry-delay-ms 200
+                  :retry-strategy :exponential
+                  :retry-on       [502 503 504]
+                  :refresh-token-on [401]}
 
  :operations [{:name         :$export
-               :description  "Initialize an $export FHIR operation. Requires a map with :group-id."
+               :description  "Initialize a bulk data export. Requires a map containing a valid :group-id."
                :method       :get
                :path         ["v1/r4/Group" :ref/group-id "$export"]
                :base-headers {"Prefer" "respond-async"}}]
  }
+
 ```
