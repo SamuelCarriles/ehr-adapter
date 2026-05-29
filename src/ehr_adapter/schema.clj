@@ -4,7 +4,7 @@
             [clojure.string :as str])
   (:import [org.apache.commons.validator.routines UrlValidator]))
 
-(defn valid-url?
+(defn absolute-url?
   [^String s]
   (and (string? s)
        (.isValid (UrlValidator/getInstance) s)))
@@ -14,14 +14,17 @@
   (and (string? s)
        (not (str/blank? s))))
 
-(def basic-auth
+;; ===========================================================
+;; Auth Strategies (sub-schemas for Authentication)
+
+(def BasicAuth
   [:map
-   [:token-url [:fn {:error/message "token-url must be a valid URL"} valid-url?]]
+   [:token-url [:fn {:error/message "token-url must be a valid URL"} absolute-url?]]
    [:username [:fn {:error/message "username must be a non-blank string"} not-blank-str?]]
    [:password [:fn {:error/message "password must be a non-blank string"} not-blank-str?]]
    [:payload {:optional true} [:map-of :keyword :any]]])
 
-(def smart-auth
+(def SmartOnFHIR
   [:and
    [:fn {:error/message "exactly one of :private-key or :private-key-path must be provided"} (fn [{:keys [private-key private-key-path]}] (= (nil? private-key) (not (nil? private-key-path))))]
    [:map
@@ -30,42 +33,44 @@
     [:private-key {:optional true} [:fn {:error/message "private-key must be a non-blank string"} not-blank-str?]]
     [:key-id [:fn {:error/message "key-id must be a non-blank string"} not-blank-str?]]
     [:algorithm [:fn {:error/message "algorithm must be a non-blank string"} not-blank-str?]]
-    [:audience [:fn {:error/message "audience must be a valid URL"} valid-url?]]
+    [:audience [:fn {:error/message "audience must be a valid URL"} absolute-url?]]
     [:scopes [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
-    [:token-url [:fn {:error/message "token-url must be a valid URL"} valid-url?]]]])
+    [:token-url [:fn {:error/message "token-url must be a valid URL"} absolute-url?]]]])
 
-(def oauth2-auth
+(def OAuth2
   [:map
-   [:token-url [:fn {:error/message "token-url must be a valid URL"} valid-url?]]
+   [:token-url [:fn {:error/message "token-url must be a valid URL"} absolute-url?]]
    [:grant-type [:fn {:error/message "grant-type must be a non-blank string"} not-blank-str?]]
    [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
    [:client-secret [:fn {:error/message "client-secret must be a non-blank string"} not-blank-str?]]
    [:scopes {:optional true} [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
    [:payload {:optional true} [:map-of :keyword :any]]])
 
-(def api-key-auth
+(def ApiKey
   [:map
    [:api-key [:fn {:error/message "api-key must be a non-blank string"} not-blank-str?]]
    [:client-id {:optional true} [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]])
 
-(def custom-auth
+(def CustomAuth
   [:map
    [:handler [:fn {:error/message "custom-auth-handler should be a Clojure function"} fn?]]
    [:data [:map-of :any :any]]])
 
-(def auth-schema
+;; ===========================================================
+
+(def Authentication
   [:and
    [:map
     [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :api-key :custom]]
     [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]]
    [:multi {:dispatch :type}
-    [:basic-auth #'basic-auth]
-    [:smart-on-fhir/backend-services #'smart-auth]
-    [:oauth2 #'oauth2-auth]
-    [:api-key #'api-key-auth]
-    [:custom #'custom-auth]]])
+    [:basic-auth #'BasicAuth]
+    [:smart-on-fhir/backend-services #'SmartOnFHIR]
+    [:oauth2 #'OAuth2]
+    [:api-key #'ApiKey]
+    [:custom #'CustomAuth]]])
 
-(def network-config-schema
+(def NetworkConfiguration
   [:and
    [:fn {:error/message "If you configure :retries, you must provide :retry-delay-ms"}
     (fn [{:keys [retries retry-delay-ms]}]
@@ -83,7 +88,7 @@
      [:vector {:error/message "refresh-token-on must be a vector of valid HTTP status codes (100-599)"}
       [:int {:min 100 :max 599}]]]]])
 
-(def operation-schema
+(def Operation
   [:map
    [:name :keyword]
    [:path
@@ -94,23 +99,23 @@
    [:base-headers {:optional true} [:map-of :string [:or :keyword :string :int]]]
    [:description {:optional true} [:fn {:error/message "operation-description must be a non-blank string"} not-blank-str?]]])
 
-(def adapter-schema
+(def AdapterConfiguration
   [:map {:closed true}
    [:domain :qualified-keyword]
-   [:base-url [:fn {:error/message "base-url must be a valid URL"} valid-url?]]
+   [:base-url [:fn {:error/message "base-url must be a valid URL"} absolute-url?]]
    [:http-client-fn [:fn {:error/message "http-client-fn must be a Clojure function"} fn?]]
    [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
    [:auth
-    [:vector #'auth-schema]]
-   [:network-config {:optional true} #'network-config-schema]
+    [:vector #'Authentication]]
+   [:network-config {:optional true} #'NetworkConfiguration]
    [:operations {:optional true}
-    [:vector #'operation-schema]]])
+    [:vector #'Operation]]])
 
-(defn valid-adapter-config?
-  [m]
-  (if-let [explain (m/explain adapter-schema m)]
+(defn validate-adapter-config
+  [config]
+  (if-let [explain (m/explain AdapterConfiguration config)]
     (throw (ex-info "Invalid Adapter configuration"
                     {:type :invalid/schema
                      :details (me/humanize explain)}))
-    true))
+    config))
 

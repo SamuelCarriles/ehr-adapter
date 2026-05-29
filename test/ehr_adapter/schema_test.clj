@@ -16,6 +16,10 @@
 (defn- mock-custom-auth-handler [_data]
   (fn [req] req))
 
+;; =============================================================================
+;; Valid Configurations Tests
+;; =============================================================================
+
 (deftest valid-adapter-config-test
   (testing "1. Pure connector adapter with the mandatory translation middleware"
     (let [config {:domain :eclinicalworks/tenant-alpha
@@ -24,15 +28,14 @@
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :api-key
                           :api-key "secret-key-123"}]}]
-      (is (true? (schema/valid-adapter-config? config)))))
+      (is (= config (schema/validate-adapter-config config)))))
 
   (testing "2. Multitenant adapter with standard OAuth2 credentials pipeline and dynamic operations"
     (let [config {:domain :eclinicalworks/tenant-beta
                   :base-url "https://api.eclinicalworks.com/v2"
                   :http-client-fn mock-http-client
                   :middlewares [mock-translation-middleware]
-                  :auth [;; Layer 1: Standard Core EHR OAuth2 Flow (Cumple el estándar estricto)
-                         {:type          :oauth2
+                  :auth [{:type          :oauth2
                           :token-url     "https://auth.eclinicalworks.com/oauth/token"
                           :grant-type    "client_credentials"
                           :client-id     "ecw-client-id-prod"
@@ -47,7 +50,7 @@
                                 :method :get
                                 :expected-status [200 206]
                                 :base-headers {"Prefer" "respond-async"}}]}]
-      (is (true? (schema/valid-adapter-config? config)))))
+      (is (= config (schema/validate-adapter-config config)))))
 
   (testing "3. Custom auth layer with live handler factory and unstructured data map"
     (let [config {:domain :epic/hospital-central-prod
@@ -59,7 +62,11 @@
                           :data {:session-id "sess_9901"
                                  :sandbox? true
                                  :arbitrary-nested-meta {:nested "value"}}}]}]
-      (is (true? (schema/valid-adapter-config? config))))))
+      (is (= config (schema/validate-adapter-config config))))))
+
+;; =============================================================================
+;; Invalid Configurations Tests (Schema Failures)
+;; =============================================================================
 
 (deftest invalid-adapter-config-test
   (testing "Missing mandatory translation middleware (empty vector)"
@@ -71,7 +78,7 @@
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
-           (schema/valid-adapter-config? config)))))
+           (schema/validate-adapter-config config)))))
 
   (testing "Domain missing its namespace (violates multitenant routing design)"
     (let [config {:domain :flat-keyword-without-namespace
@@ -82,17 +89,16 @@
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
-           (schema/valid-adapter-config? config)))))
+           (schema/validate-adapter-config config)))))
 
   (testing "Resiliency policy contradiction (:retries present without :retry-delay-ms)"
     (try
-      (schema/valid-adapter-config?
+      (schema/validate-adapter-config
        {:domain :eclinicalworks/test-tenant
         :base-url "https://api.com"
         :http-client-fn mock-http-client
         :middlewares [mock-translation-middleware]
         :auth [{:type :api-key :api-key "123"}]
-
         :network-config {:timeout-ms 1000
                          :retries 3
                          :retry-strategy :linear}})
@@ -104,7 +110,7 @@
 
   (testing "SMART on FHIR logical error (mutual exclusion violation)"
     (try
-      (schema/valid-adapter-config?
+      (schema/validate-adapter-config
        {:domain :eclinicalworks/test-tenant
         :base-url "https://api.com"
         :http-client-fn mock-http-client
@@ -124,7 +130,7 @@
 
   (testing "Operation configuration contains a blank string path segment"
     (try
-      (schema/valid-adapter-config?
+      (schema/validate-adapter-config
        {:domain :eclinicalworks/test-tenant
         :base-url "https://api.com"
         :http-client-fn mock-http-client
@@ -137,4 +143,4 @@
       (catch clojure.lang.ExceptionInfo ex
         (let [errors (:details (ex-data ex))
               path-errors (get-in errors [:operations 0 :path])]
-          (is (str/includes? (str path-errors) "operation-path must be a non-blank string")))))))
+          (is (str/includes? (str path-errors) "each segment in operation-path must be a non-blank string")))))))
