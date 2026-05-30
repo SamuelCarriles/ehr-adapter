@@ -1,7 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License MIT">
-  <img src="https://img.shields.io/badge/language-Clojure-%2391DE51.svg?style=flat&logo=clojure&logoColor=white" alt="Clojure">
-  <img src="https://img.shields.io/badge/clojure-1.12+-blue.svg" alt="Clojure Version">
+  <img src="https://img.shields.io/badge/clj-1.12+-%2391DE51?logo=clojure&logoColor=white" alt="Clojure Version">
   <img src="https://github.com/SamuelCarriles/ehr-adapter/actions/workflows/test.yml/badge.svg" alt="Tests Status">
 </p>
 
