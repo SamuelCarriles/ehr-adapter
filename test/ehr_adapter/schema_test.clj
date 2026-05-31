@@ -155,7 +155,7 @@
       (catch clojure.lang.ExceptionInfo ex
         (let [errors (:details (ex-data ex))
               path-errors (get-in errors [:operations 0 :path])]
-          (is (str/includes? (str path-errors) "each segment in operation-path must be a non-blank string")))))))
+          (is (str/includes? (str path-errors) "each segment in operation-path must be a keyword or a non-blank string")))))))
 
 ;; =============================================================================
 ;; AdapterInstance Tests

@@ -1,7 +1,8 @@
 (ns ehr-adapter.schema
   (:require [malli.core :as m]
             [malli.error :as me]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.core :as c])
   (:import [org.apache.commons.validator.routines UrlValidator]))
 
 (defn absolute-url?
@@ -13,6 +14,14 @@
   [^String s]
   (and (string? s)
        (not (str/blank? s))))
+
+(defn path-segment?
+  [^String s]
+  (or (keyword? s)
+      (and
+       (not-blank-str? s)
+       (not (or (str/ends-with? s "/")
+                (str/starts-with? s "/"))))))
 
 ;; ===========================================================
 ;; Auth Strategies (sub-schemas for Authentication)
@@ -93,7 +102,7 @@
    [:name :keyword]
    [:path
     [:vector
-     [:or :keyword [:fn {:error/message "each segment in operation-path must be a non-blank string"} not-blank-str?]]]]
+     [:fn {:error/message "each segment in operation-path must be a keyword or a non-blank string, and can not start or end with \"/\""} path-segment?]]]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:expected-status {:optional true} [:vector [:int {:min 100 :max 599}]]]
    [:base-headers {:optional true} [:map-of :string [:or :keyword :string :int]]]
@@ -128,7 +137,7 @@
    [:domain :qualified-keyword]
    [:base-url [:fn {:error/message "base-url must be a valid URL"} absolute-url?]]
    [:auth #'RunTimeAuth]
-   [:operations [:map-of :keyword [:fn {:error/message "each operation must be a compiled Clojure function"} fn?]]]])
+   [:operations {:optional true} [:map-of :keyword [:fn {:error/message "each operation must be a compiled Clojure function"} fn?]]]])
 
 (defn validate-adapter-config
   [config]
