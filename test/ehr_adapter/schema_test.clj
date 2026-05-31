@@ -155,7 +155,58 @@
       (catch clojure.lang.ExceptionInfo ex
         (let [errors (:details (ex-data ex))
               path-errors (get-in errors [:operations 0 :path])]
-          (is (str/includes? (str path-errors) "each segment in operation-path must be a keyword or a non-blank string")))))))
+          (is (str/includes? (str path-errors) "each segment in operation-path must be a keyword or a non-blank string"))))))
+
+  (testing "URL Validation: Reject trailing slashes in base-url and auth properties"
+    (testing "Fails if base-url contains a trailing slash"
+      (let [config {:domain :eclinicalworks/test-tenant
+                    :base-url "https://api.com/v1/"
+                    :http-client-fn mock-http-client
+                    :middlewares [mock-translation-middleware]
+                    :auth [{:type :api-key :api-key "123"}]}]
+        (try
+          (schema/validate-adapter-config config)
+          (is false "Expected ExceptionInfo due to trailing slash in base-url")
+          (catch clojure.lang.ExceptionInfo ex
+            (let [errors (:details (ex-data ex))]
+              (is (some #(clojure.string/includes? % "base-url must be a valid URL without a trailing slash")
+                        (:base-url errors))))))))
+
+    (testing "Fails if auth token-url contains a trailing slash"
+      (let [config {:domain :eclinicalworks/test-tenant
+                    :base-url "https://api.com/v1"
+                    :http-client-fn mock-http-client
+                    :middlewares [mock-translation-middleware]
+                    :auth [{:type :oauth2
+                            :token-url "https://auth.com/token/"
+                            :grant-type "client_credentials"
+                            :client-id "id"
+                            :client-secret "secret"}]}]
+        (try
+          (schema/validate-adapter-config config)
+          (is false "Expected ExceptionInfo due to trailing slash in token-url")
+          (catch clojure.lang.ExceptionInfo ex
+            (let [errors (:details (ex-data ex))
+                  auth-errors (first (:auth errors))]
+              (is (clojure.string/includes? (str auth-errors) "token-url must be a valid URL without a trailing slash"))))))))
+
+  (testing "Operation configuration: Reject path segments starting or ending with \"/\""
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com/v1"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :api-key :api-key "123"}]
+                  :operations [{:name :get-patient
+                                :method :get
+                                :path ["/v1" "Patient/"]}]}]
+      (try
+        (schema/validate-adapter-config config)
+        (is false "Expected ExceptionInfo due to invalid slashes in path segments")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))
+                path-errors (get-in errors [:operations 0 :path])]
+            (is (some #(clojure.string/includes? % "each segment in operation-path must be a keyword or a non-blank string, and can not start or end with")
+                      path-errors))))))))
 
 ;; =============================================================================
 ;; AdapterInstance Tests
