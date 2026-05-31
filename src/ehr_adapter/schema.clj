@@ -1,14 +1,19 @@
 (ns ehr-adapter.schema
   (:require [malli.core :as m]
             [malli.error :as me]
-            [clojure.string :as str]
-            [clojure.core :as c])
+            [clojure.string :as str])
   (:import [org.apache.commons.validator.routines UrlValidator]))
 
 (defn absolute-url?
   [^String s]
   (and (string? s)
        (.isValid (UrlValidator/getInstance) s)))
+
+(defn no-trailing-slash-url?
+  "Returns true if s is a valid absolute URL and does not end with a slash"
+  [^String s]
+  (and (absolute-url? s)
+       (not (str/ends-with? s "/"))))
 
 (defn not-blank-str?
   [^String s]
@@ -28,7 +33,7 @@
 
 (def BasicAuth
   [:map
-   [:token-url [:fn {:error/message "token-url must be a valid URL"} absolute-url?]]
+   [:token-url [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:username [:fn {:error/message "username must be a non-blank string"} not-blank-str?]]
    [:password [:fn {:error/message "password must be a non-blank string"} not-blank-str?]]
    [:payload {:optional true} [:map-of :keyword :any]]])
@@ -42,13 +47,13 @@
     [:private-key {:optional true} [:fn {:error/message "private-key must be a non-blank string"} not-blank-str?]]
     [:key-id [:fn {:error/message "key-id must be a non-blank string"} not-blank-str?]]
     [:algorithm [:fn {:error/message "algorithm must be a non-blank string"} not-blank-str?]]
-    [:audience [:fn {:error/message "audience must be a valid URL"} absolute-url?]]
+    [:audience [:fn {:error/message "audience must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
     [:scopes [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
-    [:token-url [:fn {:error/message "token-url must be a valid URL"} absolute-url?]]]])
+    [:token-url [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]]])
 
 (def OAuth2
   [:map
-   [:token-url [:fn {:error/message "token-url must be a valid URL"} absolute-url?]]
+   [:token-url [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:grant-type [:fn {:error/message "grant-type must be a non-blank string"} not-blank-str?]]
    [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
    [:client-secret [:fn {:error/message "client-secret must be a non-blank string"} not-blank-str?]]
@@ -111,7 +116,7 @@
 (def AdapterConfiguration
   [:map {:closed true}
    [:domain :qualified-keyword]
-   [:base-url [:fn {:error/message "base-url must be a valid URL"} absolute-url?]]
+   [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:http-client-fn [:fn {:error/message "http-client-fn must be a Clojure function"} fn?]]
    [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
    [:auth
@@ -135,7 +140,7 @@
 (def AdapterInstance
   [:map {:closed true}
    [:domain :qualified-keyword]
-   [:base-url [:fn {:error/message "base-url must be a valid URL"} absolute-url?]]
+   [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:auth #'RunTimeAuth]
    [:operations {:optional true} [:map-of :keyword [:fn {:error/message "each operation must be a compiled Clojure function"} fn?]]]])
 
@@ -150,7 +155,7 @@
 (defn validate-adapter-instance
   [instance]
   (if-let [explain (m/explain AdapterInstance instance)]
-    (throw (ex-info "Invalid Adapter configuration"
+    (throw (ex-info "Invalid Adapter instance"
                     {:type :invalid/schema
                      :details (me/humanize explain)}))
     instance))
