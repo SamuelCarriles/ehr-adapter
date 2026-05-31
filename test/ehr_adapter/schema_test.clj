@@ -74,6 +74,24 @@
                           :data {:session-id "sess_9901"
                                  :sandbox? true
                                  :arbitrary-nested-meta {:nested "value"}}}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "4. OAuth2 configuration with a valid and complex declarative :normalize map"
+    (let [config {:domain :eclinicalworks/tenant-normalize-valid
+                  :base-url "https://api.eclinicalworks.com/v2"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type          :oauth2
+                          :token-url     "https://auth.eclinicalworks.com/oauth/token"
+                          :grant-type    "client_credentials"
+                          :client-id      "ecw-id"
+                          :client-secret "ecw-secret"}
+
+                         {:type :normalize
+                          :token         [:body :data "access_token"]
+                          :expires-in    [:body :meta :expires 0 :seconds]
+                          :token-type    [:body "token_type"]
+                          :refresh-token [:body :refresh_key]}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -206,7 +224,36 @@
           (let [errors (:details (ex-data ex))
                 path-errors (get-in errors [:operations 0 :path])]
             (is (some #(clojure.string/includes? % "each segment in operation-path must be a keyword or a non-blank string, and can not start or end with")
-                      path-errors))))))))
+                      path-errors)))))))
+
+  (testing "Independent :normalize layer validation failures"
+    (testing "Fails if syntax type is not allowed (e.g. passing a raw number instead of path/key)"
+      (try
+        (schema/validate-adapter-config
+         {:domain :eclinicalworks/test-tenant
+          :base-url "https://api.com/v1"
+          :http-client-fn mock-http-client
+          :middlewares [mock-translation-middleware]
+          :auth [{:type    :normalize
+                  :token   12345}]})
+        (is false "Expected ExceptionInfo due to invalid token extraction value")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (-> ex ex-data :details :auth first)]
+            (is (some? (:token errors)))))))
+
+    (testing "Fails if :normalize fields are malformed structures"
+      (try
+        (schema/validate-adapter-config
+         {:domain :eclinicalworks/test-tenant
+          :base-url "https://api.com/v1"
+          :http-client-fn mock-http-client
+          :middlewares [mock-translation-middleware]
+          :auth [{:type    :normalize
+                  :token   {:path [:body :token]}}]})
+        (is false "Expected ExceptionInfo due to map structure in normalize layer")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (-> ex ex-data :details :auth first)]
+            (is (some? (:token errors)))))))))
 
 ;; =============================================================================
 ;; AdapterInstance Tests

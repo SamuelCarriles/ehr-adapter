@@ -29,11 +29,10 @@
                 (str/starts-with? s "/"))))))
 
 ;; ===========================================================
-;; Auth Strategies (sub-schemas for Authentication)
+;; Auth Strategies or Layers (sub-schemas for Authentication)
 
 (def BasicAuth
   [:map
-   [:token-url [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:username [:fn {:error/message "username must be a non-blank string"} not-blank-str?]]
    [:password [:fn {:error/message "password must be a non-blank string"} not-blank-str?]]
    [:payload {:optional true} [:map-of :keyword :any]]])
@@ -68,20 +67,31 @@
 (def CustomAuth
   [:map
    [:handler [:fn {:error/message "custom-auth-handler should be a Clojure function"} fn?]]
-   [:data [:map-of :any :any]]])
+   [:data {:optional true} [:map-of :any :any]]])
+
+(def ExtractionPath
+  [:vector [:or :string :keyword :int]])
+
+(def NormalizeMap
+  [:map
+   [:token {:optional true} [:or :keyword :string #'ExtractionPath]]
+   [:token-type {:optional true} [:or :keyword :string #'ExtractionPath]]
+   [:expires-in {:optional true} [:or :keyword :string #'ExtractionPath]]
+   [:refresh-token {:optional true} [:or :keyword :string #'ExtractionPath]]])
 
 ;; ===========================================================
 
 (def Authentication
   [:and
    [:map
-    [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :api-key :custom]]
+    [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :api-key :normalize :custom]]
     [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]]
    [:multi {:dispatch :type}
     [:basic-auth #'BasicAuth]
     [:smart-on-fhir/backend-services #'SmartOnFHIR]
     [:oauth2 #'OAuth2]
     [:api-key #'ApiKey]
+    [:normalize #'NormalizeMap]
     [:custom #'CustomAuth]]])
 
 (def NetworkConfiguration
