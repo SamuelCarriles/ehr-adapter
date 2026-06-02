@@ -1,5 +1,6 @@
 (ns ehr-adapter.reference
-  (:require [clojure.walk :refer [postwalk]]))
+  (:require [clojure.walk :refer [postwalk]]
+            [ehr-adapter.error :as error]))
 
 (defn reference?
   "Returns true if x is a keyword with the namespace 'ref' 
@@ -32,10 +33,13 @@
        (let [k (keyword (name x))]
          (if (contains? ref-bindings k)
            (get ref-bindings k)
-           (throw (ex-info (format "The reference %s can't be resolved" x)
-                           {:type :invalid/reference
-                            :details {:context form
-                                      :ref-bindings ref-bindings}}))))
+           (throw (error/info :invalid/reference
+                              {:message (format "The reference %s can't be resolved" x)
+                               :scope :ehr-adapter.reference
+                               :operation :resolve-reference
+                               :reference x
+                               :context form
+                               :ref-bindings ref-bindings}))))
        x))
    form))
 
