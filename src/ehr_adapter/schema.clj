@@ -1,7 +1,8 @@
 (ns ehr-adapter.schema
   (:require [malli.core :as m]
             [malli.error :as me]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [ehr-adapter.error :as error])
   (:import [org.apache.commons.validator.routines UrlValidator]))
 
 (defn absolute-url?
@@ -35,7 +36,7 @@
   [:map
    [:username [:fn {:error/message "username must be a non-blank string"} not-blank-str?]]
    [:password [:fn {:error/message "password must be a non-blank string"} not-blank-str?]]
-   [:payload {:optional true} [:map-of :keyword :any]]])
+   [:token-url {:optional true} [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]])
 
 (def SmartOnFHIR
   [:and
@@ -56,8 +57,7 @@
    [:grant-type [:fn {:error/message "grant-type must be a non-blank string"} not-blank-str?]]
    [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
    [:client-secret [:fn {:error/message "client-secret must be a non-blank string"} not-blank-str?]]
-   [:scopes {:optional true} [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
-   [:payload {:optional true} [:map-of :keyword :any]]])
+   [:scopes {:optional true} [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]])
 
 (def ApiKey
   [:map
@@ -72,6 +72,12 @@
 (def ExtractionPath
   [:vector [:or :string :keyword :int]])
 
+(def Payload
+  [:map
+   [:body {:optional true} [:map-of :any :any]]
+   [:headers {:optional true} [:map-of :any :any]]
+   [:query {:optional true} [:map-of :any :any]]])
+
 (def NormalizeMap
   [:map
    [:token {:optional true} [:or :keyword :string #'ExtractionPath]]
@@ -85,7 +91,8 @@
   [:and
    [:map
     [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :api-key :normalize :custom]]
-    [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]]
+    [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]
+    [:payload {:optional true} #'Payload]]
    [:multi {:dispatch :type}
     [:basic-auth #'BasicAuth]
     [:smart-on-fhir/backend-services #'SmartOnFHIR]
@@ -136,7 +143,7 @@
     [:vector #'Operation]]])
 
 ;; =================================================================
-;; AdapterInstance related
+;; AdapterInstance
 
 (def RunTimeAuth
   [:map
@@ -157,15 +164,42 @@
 (defn validate-adapter-config
   [config]
   (if-let [explain (m/explain AdapterConfiguration config)]
-    (throw (ex-info "Invalid Adapter configuration"
-                    {:type :invalid/schema
-                     :details (me/humanize explain)}))
+    (throw (error/info :invalid/schema {:message "Invalid Adapter configuration"
+                                        :scope #'ehr-adapter.schema
+                                        :operation :validate
+                                        :details (me/humanize explain)}))
     config))
 
 (defn validate-adapter-instance
   [instance]
   (if-let [explain (m/explain AdapterInstance instance)]
-    (throw (ex-info "Invalid Adapter instance"
+    (throw (error/info :invalid/schema {:message "Invalid Adapter instance"
+                                        :scope #'ehr-adapter.schema
+                                        :operation :validate
+                                        :details (me/humanize explain)}))
+    instance))
+
+;; =======================================
+;; Http Request
+
+(def HttpRequest
+  [:map {:closed true}
+   [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
+   [:url [:fn {:error/message "the url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
+   [:headers {:optional true} [:map-of :any :any]]
+   [:body {:optional true} :any]
+   [:form-params {:optional true} [:map-of :any :any]]
+   [:query-params {:optional true} [:map-of :any :any]]
+   [:timeout-ms {:optional true} :int]
+   [:content-type {:optional true} :keyword]
+   [:accept {:optional true} :keyword]
+   [:async {:optional true} :boolean]
+   [:throw-exceptions {:optional true} :boolean]])
+
+(defn validate-http-request
+  [m]
+  (if-let [explain (m/explain HttpRequest m)]
+    (throw (ex-info "Invalid HTTP Request map"
                     {:type :invalid/schema
                      :details (me/humanize explain)}))
-    instance))
+    m))
