@@ -165,7 +165,7 @@
   [config]
   (if-let [explain (m/explain AdapterConfiguration config)]
     (throw (error/info :invalid/schema {:message "Invalid Adapter configuration"
-                                        :scope #'ehr-adapter.schema
+                                        :scope :ehr-adapter.schema
                                         :operation :validate
                                         :details (me/humanize explain)}))
     config))
@@ -174,7 +174,7 @@
   [instance]
   (if-let [explain (m/explain AdapterInstance instance)]
     (throw (error/info :invalid/schema {:message "Invalid Adapter instance"
-                                        :scope #'ehr-adapter.schema
+                                        :scope :ehr-adapter.schema
                                         :operation :validate
                                         :details (me/humanize explain)}))
     instance))
@@ -199,7 +199,8 @@
 (defn validate-http-request
   [m]
   (if-let [explain (m/explain HttpRequest m)]
-    (throw (ex-info "Invalid HTTP Request map"
-                    {:type :invalid/schema
-                     :details (me/humanize explain)}))
+    (throw (error/info :invalid/schema {:message "Invalid HTTP Request map"
+                                        :scope :ehr-adapter.schema
+                                        :operation :validate
+                                        :details (me/humanize explain)}))
     m))
