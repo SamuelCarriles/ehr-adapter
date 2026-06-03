@@ -51,6 +51,6 @@
                 ex-meta (ex-data ex)]
             (is (= "The reference :ref/missingId can't be resolved" ex-msg))
 
-            (is (= :invalid/reference (:type ex-meta)))
+            (is (= :invalid/reference (:code ex-meta)))
             (is (= template (get-in ex-meta [:details :context])))
             (is (= bindings (get-in ex-meta [:details :ref-bindings])))))))))
