@@ -8,7 +8,6 @@
 
 (defn- mock-translation-middleware [handler]
   (fn [req]
-    ;; Acts as a coercion/translation layer before and after execution
     (let [coerced-req (assoc req :coerced? true)
           response (handler coerced-req)]
       (assoc response :normalized? true))))
@@ -50,7 +49,7 @@
                   :auth [{:type          :oauth2
                           :token-url     "https://auth.eclinicalworks.com/oauth/token"
                           :grant-type    "client_credentials"
-                          :client-id     "ecw-client-id-prod"
+                          :client-id      "ecw-client-id-prod"
                           :client-secret "ecw-client-secret-secure-123"}]
                   :network-config {:timeout-ms 5000
                                    :retries 3
@@ -76,7 +75,7 @@
                                  :arbitrary-nested-meta {:nested "value"}}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
-  (testing "4. OAuth2 configuration with a valid and complex declarative :normalize map"
+  (testing "4. OAuth2 configuration with a valid and complex declarative :normalize map (Sugar + ExtractionPath)"
     (let [config {:domain :eclinicalworks/tenant-normalize-valid
                   :base-url "https://api.eclinicalworks.com/v2"
                   :http-client-fn mock-http-client
@@ -86,12 +85,53 @@
                           :grant-type    "client_credentials"
                           :client-id      "ecw-id"
                           :client-secret "ecw-secret"}
+                         {:type          :normalize
+                          :token         :access_token
+                          :token-type    "token_type"
+                          :expires-in    [:body :meta :expires 0 :sec]
+                          :refresh-token [:refresh_key]}]}]
+      (is (= config (schema/validate-adapter-config config)))))
 
-                         {:type :normalize
-                          :token         [:body :data "access_token"]
-                          :expires-in    [:body :meta :expires 0 :seconds]
-                          :token-type    [:body "token_type"]
-                          :refresh-token [:body :refresh_key]}]}]
+  (testing "5. Normalization layer completely implicit (Malli should accept empty map since all keys are optional)"
+    (let [config {:domain :eclinicalworks/tenant-normalize-empty
+                  :base-url "https://api.eclinicalworks.com/v2"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :oauth2
+                          :token-url "https://auth.eclinicalworks.com/oauth/token"
+                          :grant-type "client_credentials"
+                          :client-id "id"
+                          :client-secret "secret"}
+                         {:type :normalize}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "6. Global :payload validation using heterogeneous structures ([:map-of :any :any])"
+    (let [config {:domain :advancedmd/tenant-payload-heterogeneous
+                  :base-url "https://api.advancedmd.com/v2"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type          :oauth2
+                          :token-url     "https://api.advancedmd.com/oauth2/token"
+                          :grant-type    "client_credentials"
+                          :client-id      "adv-id"
+                          :client-secret "adv-secret"
+                          :payload       {:body    {"alg"      "RS256"
+                                                    :custom-id 12345}
+                                          :headers {"X-Partner-Id" "partner-99"
+                                                    :X-Context-Id  "ctx-abc"}
+                                          :query   {:sandbox true}}}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "7. Dynamic/Hybrid :basic-auth supporting optional :token-url and base :payload (AdvancedMD use-case)"
+    (let [config {:domain :advancedmd/tenant-dynamic-basic
+                  :base-url "https://api.advancedmd.com/v2"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type      :basic-auth
+                          :username  "adv-integrator"
+                          :password  "super-secure-pass"
+                          :token-url "https://api.advancedmd.com/oauth2/token"
+                          :payload   {:body {:alg        "RS256"}}}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -208,6 +248,23 @@
                   auth-errors (first (:auth errors))]
               (is (clojure.string/includes? (str auth-errors) "token-url must be a valid URL without a trailing slash"))))))))
 
+  (testing "Fails if dynamic basic-auth token-url contains a trailing slash"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com/v1"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type      :basic-auth
+                          :username  "user"
+                          :password  "pass"
+                          :token-url "https://auth.com/token/"}]}]
+      (try
+        (schema/validate-adapter-config config)
+        (is false "Expected ExceptionInfo due to trailing slash in basic-auth token-url")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))
+                auth-errors (first (:auth errors))]
+            (is (clojure.string/includes? (str auth-errors) "token-url must be a valid URL without a trailing slash")))))))
+
   (testing "Operation configuration: Reject path segments starting or ending with \"/\""
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com/v1"
@@ -227,7 +284,7 @@
                       path-errors)))))))
 
   (testing "Independent :normalize layer validation failures"
-    (testing "Fails if syntax type is not allowed (e.g. passing a raw number instead of path/key)"
+    (testing "Fails if syntax type is not allowed (e.g. passing a raw number instead of path/key/vector)"
       (try
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
@@ -241,7 +298,7 @@
           (let [errors (-> ex ex-data :details :auth first)]
             (is (some? (:token errors)))))))
 
-    (testing "Fails if :normalize fields are malformed structures"
+    (testing "Fails if :normalize fields are malformed structures (like unpermitted raw maps)"
       (try
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
@@ -266,7 +323,6 @@
                   :auth [{:type :api-key :api-key "secret-123"}]
                   :operations [{:name :search-patient :path ["v1" :id] :method :get}]}
           instance (build-mock-instance config)]
-
       (is (= instance (schema/validate-adapter-instance instance)))))
 
   (testing "2. Error: Fails if :auth :state is not a real IAtom"
@@ -298,3 +354,86 @@
           (let [errors (:details (ex-data ex))
                 op-errors (get-in errors [:operations :search-patient])]
             (is (str/includes? (str op-errors) "each operation must be a compiled Clojure function"))))))))
+
+;; =============================================================================
+;; HttpRequest Schema Tests
+;; =============================================================================
+
+(deftest valid-http-request-test
+  (testing "1. Minimal valid request (only required fields)"
+    (let [req {:method :get
+               :url "https://api.example.com/v1/Patient"}]
+      (is (= req (schema/validate-http-request req)))))
+
+  (testing "2. Full request with all optional fields"
+    (let [req {:method :post
+               :url "https://api.example.com/v1/Patient"
+               :headers {"Authorization" "Bearer token-123"
+                         "X-Custom" "value"}
+               :body {:name "John" :id 123}
+               :content-type :json
+               :accept :json
+               :query-params {"page" 1 "limit" 10}
+               :timeout-ms 5000
+               :async false
+               :throw-exceptions false}]
+      (is (= req (schema/validate-http-request req)))))
+
+  (testing "3. POST with form-params (url-encoded use case)"
+    (let [req {:method :post
+               :url "https://auth.example.com/token"
+               :form-params {"grant_type" "client_credentials"
+                             "client_id" "abc"}
+               :content-type :form-url-encoded}]
+      (is (= req (schema/validate-http-request req)))))
+
+  (testing "4. Headers accept heterogeneous values"
+    (let [req {:method :get
+               :url "https://api.example.com/v1/Group"
+               :headers {:Authorization "Bearer xyz"
+                         "X-Int-Header" 42}}]
+      (is (= req (schema/validate-http-request req))))))
+
+(deftest invalid-http-request-test
+  (testing "1. Missing required :method"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema/validate-http-request
+                  {:url "https://api.example.com/v1/Patient"}))))
+
+  (testing "2. Missing required :url"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema/validate-http-request
+                  {:method :get}))))
+
+  (testing "3. URL with trailing slash is rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema/validate-http-request
+                  {:method :get
+                   :url "https://api.example.com/v1/Patient/"}))))
+
+  (testing "4. Invalid :method value"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema/validate-http-request
+                  {:method :invalid-verb
+                   :url "https://api.example.com/v1/Patient"}))))
+
+  (testing "5. :timeout-ms as string instead of int"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema/validate-http-request
+                  {:method :get
+                   :url "https://api.example.com/v1/Patient"
+                   :timeout-ms "5000"}))))
+
+  (testing "6. :async as string instead of boolean"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema/validate-http-request
+                  {:method :get
+                   :url "https://api.example.com/v1/Patient"
+                   :async "true"}))))
+
+  (testing "7. Unknown key rejected by closed map"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (schema/validate-http-request
+                  {:method :get
+                   :url "https://api.example.com/v1/Patient"
+                   :unknown-key "this should fail"})))))
