@@ -37,3 +37,13 @@
             :code      code
             :details   {:format   value
                         :expected expected}}))
+
+(defmethod info :invalid/reference
+  [code {:keys [scope operation message reference context ref-bindings]}]
+  (ex-info message
+           {:scope scope
+            :operation operation
+            :code code
+            :details {:reference reference
+                      :context context
+                      :ref-bindings ref-bindings}}))
