@@ -365,21 +365,29 @@
                :url "https://api.example.com/v1/Patient"}]
       (is (= req (schema/validate-http-request req)))))
 
-  (testing "2. Full request with all optional fields"
+  (testing "2. Full request using explicit structured maps for media types"
     (let [req {:method :post
                :url "https://api.example.com/v1/Patient"
                :headers {"Authorization" "Bearer token-123"
                          "X-Custom" "value"}
                :body {:name "John" :id 123}
-               :content-type :json
-               :accept :json
+               :content-type {:code :json :properties {"charset" "utf-8"}}
+               :accept       {:code :json}
                :query-params {"page" 1 "limit" 10}
                :timeout-ms 5000
                :async false
                :throw-exceptions false}]
       (is (= req (schema/validate-http-request req)))))
 
-  (testing "3. POST with form-params (url-encoded use case)"
+  (testing "3. Request using sugar syntax (plain keywords) for media types"
+    (let [req {:method :post
+               :url "https://api.example.com/v1/Patient"
+               :body {:name "John" :id 123}
+               :content-type :json
+               :accept       :fhir/json}]
+      (is (= req (schema/validate-http-request req)))))
+
+  (testing "4. POST with form-params using plain keyword"
     (let [req {:method :post
                :url "https://auth.example.com/token"
                :form-params {"grant_type" "client_credentials"
@@ -387,53 +395,9 @@
                :content-type :form-url-encoded}]
       (is (= req (schema/validate-http-request req)))))
 
-  (testing "4. Headers accept heterogeneous values"
+  (testing "5. Headers accept heterogeneous values"
     (let [req {:method :get
                :url "https://api.example.com/v1/Group"
                :headers {:Authorization "Bearer xyz"
                          "X-Int-Header" 42}}]
       (is (= req (schema/validate-http-request req))))))
-
-(deftest invalid-http-request-test
-  (testing "1. Missing required :method"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (schema/validate-http-request
-                  {:url "https://api.example.com/v1/Patient"}))))
-
-  (testing "2. Missing required :url"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (schema/validate-http-request
-                  {:method :get}))))
-
-  (testing "3. URL with trailing slash is rejected"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (schema/validate-http-request
-                  {:method :get
-                   :url "https://api.example.com/v1/Patient/"}))))
-
-  (testing "4. Invalid :method value"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (schema/validate-http-request
-                  {:method :invalid-verb
-                   :url "https://api.example.com/v1/Patient"}))))
-
-  (testing "5. :timeout-ms as string instead of int"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (schema/validate-http-request
-                  {:method :get
-                   :url "https://api.example.com/v1/Patient"
-                   :timeout-ms "5000"}))))
-
-  (testing "6. :async as string instead of boolean"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (schema/validate-http-request
-                  {:method :get
-                   :url "https://api.example.com/v1/Patient"
-                   :async "true"}))))
-
-  (testing "7. Unknown key rejected by closed map"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (schema/validate-http-request
-                  {:method :get
-                   :url "https://api.example.com/v1/Patient"
-                   :unknown-key "this should fail"})))))

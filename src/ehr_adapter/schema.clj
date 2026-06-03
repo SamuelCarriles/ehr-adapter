@@ -182,7 +182,12 @@
 ;; =======================================
 ;; Http Request
 
-(def HttpRequest
+(def ContentTypeStructure
+  [:map
+   [:code :keyword]
+   [:properties {:optional true} [:map-of :string :string]]])
+
+(def HttpMap
   [:map {:closed true}
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:url [:fn {:error/message "the url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
@@ -191,14 +196,14 @@
    [:form-params {:optional true} [:map-of :any :any]]
    [:query-params {:optional true} [:map-of :any :any]]
    [:timeout-ms {:optional true} :int]
-   [:content-type {:optional true} :keyword]
-   [:accept {:optional true} :keyword]
+   [:content-type {:optional true} [:or :keyword #'ContentTypeStructure]]
+   [:accept {:optional true} [:or :keyword #'ContentTypeStructure]]
    [:async {:optional true} :boolean]
    [:throw-exceptions {:optional true} :boolean]])
 
 (defn validate-http-request
   [m]
-  (if-let [explain (m/explain HttpRequest m)]
+  (if-let [explain (m/explain HttpMap m)]
     (throw (error/info :invalid/schema {:message "Invalid HTTP Request map"
                                         :scope :ehr-adapter.schema
                                         :operation :validate
