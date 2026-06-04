@@ -1,6 +1,7 @@
 (ns ehr-adapter.schema
   (:require [malli.core :as m]
             [malli.error :as me]
+            [malli.util :as mu]
             [clojure.string :as str]
             [ehr-adapter.error :as error])
   (:import [org.apache.commons.validator.routines UrlValidator]))
@@ -22,12 +23,47 @@
        (not (str/blank? s))))
 
 (defn path-segment?
-  [^String s]
-  (or (keyword? s)
+  [segment]
+  (or (keyword? segment)
       (and
-       (not-blank-str? s)
-       (not (or (str/ends-with? s "/")
-                (str/starts-with? s "/"))))))
+       (not-blank-str? segment)
+       (not (or (str/ends-with? segment "/")
+                (str/starts-with? segment "/"))))))
+
+;; =======================================
+;; Http Request
+
+(def MimeCodeMap
+  [:and
+   [:fn {:error/message "If code is :unsupported, you must provide a :raw-mime field"}
+    (fn [{:keys [code raw-mime]}]
+      (if (= :unsupported code) (not (nil? raw-mime)) true))]
+   [:map
+    [:code :keyword]
+    [:raw-mime {:optional true} [:fn {:error/message "raw-mime must be a non-blank string"} not-blank-str?]]
+    [:properties {:optional true} [:map-of :string :string]]]])
+
+(def HttpRequest
+  [:map {:closed true}
+   [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
+   [:url [:fn {:error/message "the url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
+   [:headers {:optional true} [:map-of :any :any]]
+   [:body {:optional true} :any]
+   [:form-params {:optional true} [:map-of :any :any]]
+   [:query-params {:optional true} [:map-of :any :any]]
+   [:timeout-ms {:optional true} :int]
+   [:content-type {:optional true} [:or :keyword #'MimeCodeMap]]
+   [:accept {:optional true} [:or :keyword #'MimeCodeMap]]
+   [:async {:optional true} :boolean]
+   [:throw-exceptions {:optional true} :boolean]])
+
+(def HttpRequestOption
+  (-> HttpRequest
+      (mu/optional-keys [:method :url])
+      (mu/merge
+       [:fn {:error/message "if :method exists, :url must exist, and vice versa"}
+        (fn [{:keys [method url]}]
+          (= (nil? method) (nil? url)))])))
 
 ;; ===========================================================
 ;; Auth Strategies or Layers (sub-schemas for Authentication)
@@ -72,12 +108,6 @@
 (def ExtractionPath
   [:vector [:or :string :keyword :int]])
 
-(def Payload
-  [:map
-   [:body {:optional true} [:map-of :any :any]]
-   [:headers {:optional true} [:map-of :any :any]]
-   [:query {:optional true} [:map-of :any :any]]])
-
 (def NormalizeMap
   [:map
    [:token {:optional true} [:or :keyword :string #'ExtractionPath]]
@@ -92,7 +122,10 @@
    [:map
     [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :api-key :normalize :custom]]
     [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]
-    [:payload {:optional true} #'Payload]]
+    [:options {:optional true}
+     [:map
+      [:request {:optional true} #'HttpRequestOption]]]]
+
    [:multi {:dispatch :type}
     [:basic-auth #'BasicAuth]
     [:smart-on-fhir/backend-services #'SmartOnFHIR]
@@ -161,67 +194,31 @@
    [:auth #'RunTimeAuth]
    [:operations {:optional true} [:map-of :keyword [:fn {:error/message "each operation must be a compiled Clojure function"} fn?]]]])
 
-(defn validate-adapter-config
-  [config]
-  (if-let [explain (m/explain AdapterConfiguration config)]
-    (throw (error/info :invalid/schema {:message "Invalid Adapter configuration"
+;; =================================================================
+;; Validators
+
+(defn validate-schema
+  [schema form error-message]
+  (if-let [explain (m/explain schema form)]
+    (throw (error/info :invalid/schema {:message error-message
                                         :scope :ehr-adapter.schema
                                         :operation :validate
                                         :details (me/humanize explain)}))
-    config))
+    form))
+
+(defn validate-adapter-config
+  [config]
+  (validate-schema AdapterConfiguration config "Invalid Adapter configuration"))
 
 (defn validate-adapter-instance
   [instance]
-  (if-let [explain (m/explain AdapterInstance instance)]
-    (throw (error/info :invalid/schema {:message "Invalid Adapter instance"
-                                        :scope :ehr-adapter.schema
-                                        :operation :validate
-                                        :details (me/humanize explain)}))
-    instance))
-
-;; =======================================
-;; Http Request
-
-(def MimeCodeMap
-  [:and
-   [:fn {:error/message "If code is :unsupported, you must provide a :raw-mime field"}
-    (fn [{:keys [code raw-mime]}]
-      (if (= :unsupported code) (not (nil? raw-mime)) true))]
-   [:map
-    [:code :keyword]
-    [:raw-mime {:optional true} [:fn {:error/message "raw-mime must be a non-blank string"} not-blank-str?]]
-    [:properties {:optional true} [:map-of :string :string]]]])
-
-(def HttpRequest
-  [:map {:closed true}
-   [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
-   [:url [:fn {:error/message "the url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
-   [:headers {:optional true} [:map-of :any :any]]
-   [:body {:optional true} :any]
-   [:form-params {:optional true} [:map-of :any :any]]
-   [:query-params {:optional true} [:map-of :any :any]]
-   [:timeout-ms {:optional true} :int]
-   [:content-type {:optional true} [:or :keyword #'MimeCodeMap]]
-   [:accept {:optional true} [:or :keyword #'MimeCodeMap]]
-   [:async {:optional true} :boolean]
-   [:throw-exceptions {:optional true} :boolean]])
+  (validate-schema AdapterInstance instance "Invalid Adapter instance"))
 
 (defn validate-http-request
-  [m]
-  (if-let [explain (m/explain HttpRequest m)]
-    (throw (error/info :invalid/schema
-                       {:message "Invalid HTTP Request map"
-                        :scope :ehr-adapter.schema
-                        :operation :validate
-                        :details (me/humanize explain)}))
-    m))
+  [req-map]
+  (validate-schema HttpRequest req-map "Invalid HTTP Request map"))
 
 (defn validate-mime-code-map
-  [m]
-  (if-let [explain (m/explain MimeCodeMap m)]
-    (throw (error/info :invalid/schema
-                       {:message "Invalid Content-Type map structure"
-                        :scope :ehr-adapter.schema
-                        :operation :validate
-                        :details (me/humanize explain)}))
-    m))
+  [mime-code-map]
+  (validate-schema MimeCodeMap mime-code-map "Invalid Mime code map"))
+

@@ -86,7 +86,7 @@
                           :client-id      "ecw-id"
                           :client-secret "ecw-secret"}
                          {:type          :normalize
-                          :token         :access_token
+                          :token          :access_token
                           :token-type    "token_type"
                           :expires-in    [:body :meta :expires 0 :sec]
                           :refresh-token [:refresh_key]}]}]
@@ -115,11 +115,12 @@
                           :grant-type    "client_credentials"
                           :client-id      "adv-id"
                           :client-secret "adv-secret"
-                          :payload       {:body    {"alg"      "RS256"
-                                                    :custom-id 12345}
-                                          :headers {"X-Partner-Id" "partner-99"
-                                                    :X-Context-Id  "ctx-abc"}
-                                          :query   {:sandbox true}}}]}]
+                          :options       {:request {:content-type {:code :unsupported :raw-mime "custom-content-type"}
+                                                    :form-params {"alg" "RS256"
+                                                                  :custom-id 12345}
+                                                    :headers {"X-Partner-Id" "partner-99"
+                                                              :X-Context-Id  "ctx-abc"}
+                                                    :query-params {:sandbox true}}}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
   (testing "7. Dynamic/Hybrid :basic-auth supporting optional :token-url and base :payload (AdvancedMD use-case)"
@@ -131,9 +132,8 @@
                           :username  "adv-integrator"
                           :password  "super-secure-pass"
                           :token-url "https://api.advancedmd.com/oauth2/token"
-                          :payload   {:body {:alg        "RS256"}}}]}]
+                          :options   {:request {:form-params {:alg "RS256"}}}}]}]
       (is (= config (schema/validate-adapter-config config))))))
-
 ;; =============================================================================
 ;; Invalid Configurations Tests (Schema Failures)
 ;; =============================================================================

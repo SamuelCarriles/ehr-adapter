@@ -43,10 +43,9 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unsupported mime-code"
                           (header/->mime :invalid-format)))
 
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid Content-Type map structure"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid Mime code map"
                           (header/->mime {:code :unsupported :properties {"boundary" "12"}})))
 
-    ;; Tipo de dato totalmente inválido
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid mime-code format"
                           (header/->mime "application/json")))))
 
