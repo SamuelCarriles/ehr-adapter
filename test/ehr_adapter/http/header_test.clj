@@ -75,3 +75,20 @@
 
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid mime-code format"
                           (header/accept "application/json")))))
+
+(deftest json-media-type?-test
+  (testing "Returns true for JSON keywords"
+    (is (header/json-media-type? :json))
+    (is (header/json-media-type? :fhir/json)))
+
+  (testing "Returns true for structured maps with JSON code"
+    (is (header/json-media-type? {:code :json}))
+    (is (header/json-media-type? {:code :fhir/json :properties {"charset" "utf-8"}})))
+
+  (testing "Returns false for non-JSON types"
+    (is (not (header/json-media-type? :xml)))
+    (is (not (header/json-media-type? :text)))
+    (is (not (header/json-media-type? {:code :xml}))))
+
+  (testing "Returns false for nil"
+    (is (not (header/json-media-type? nil)))))

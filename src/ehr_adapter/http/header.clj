@@ -97,3 +97,12 @@
     (if-let [mime (->mime x)]
       {"Accept" mime}
       (throw (mime-error x)))))
+
+(defn json-media-type?
+  "Returns true if the given content-type value represents a JSON media type.
+ Accepts either a keyword (e.g. :json, :fhir/json) or a structured map with a :code key."
+  [content-type]
+  (let [code (if (map? content-type) (:code content-type) content-type)]
+    (or (= :json code)
+        (= :fhir/json code))))
+
