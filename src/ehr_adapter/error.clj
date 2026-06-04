@@ -47,3 +47,12 @@
             :details {:reference reference
                       :context context
                       :ref-bindings ref-bindings}}))
+
+(defmethod info :unsupported/mime-code
+  [code {:keys [scope operation message mime-code expected]}]
+  (ex-info message
+           {:scope scope
+            :operation operation
+            :code code
+            :details {:mime-code mime-code
+                      :expected expected}}))

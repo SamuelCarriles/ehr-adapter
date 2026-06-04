@@ -182,12 +182,17 @@
 ;; =======================================
 ;; Http Request
 
-(def ContentTypeStructure
-  [:map
-   [:code :keyword]
-   [:properties {:optional true} [:map-of :string :string]]])
+(def MimeCodeMap
+  [:and
+   [:fn {:error/message "If code is :unsupported, you must provide a :raw-mime field"}
+    (fn [{:keys [code raw-mime]}]
+      (if (= :unsupported code) (not (nil? raw-mime)) true))]
+   [:map
+    [:code :keyword]
+    [:raw-mime {:optional true} [:fn {:error/message "raw-mime must be a non-blank string"} not-blank-str?]]
+    [:properties {:optional true} [:map-of :string :string]]]])
 
-(def HttpMap
+(def HttpRequest
   [:map {:closed true}
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:url [:fn {:error/message "the url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
@@ -196,16 +201,27 @@
    [:form-params {:optional true} [:map-of :any :any]]
    [:query-params {:optional true} [:map-of :any :any]]
    [:timeout-ms {:optional true} :int]
-   [:content-type {:optional true} [:or :keyword #'ContentTypeStructure]]
-   [:accept {:optional true} [:or :keyword #'ContentTypeStructure]]
+   [:content-type {:optional true} [:or :keyword #'MimeCodeMap]]
+   [:accept {:optional true} [:or :keyword #'MimeCodeMap]]
    [:async {:optional true} :boolean]
    [:throw-exceptions {:optional true} :boolean]])
 
 (defn validate-http-request
   [m]
-  (if-let [explain (m/explain HttpMap m)]
-    (throw (error/info :invalid/schema {:message "Invalid HTTP Request map"
-                                        :scope :ehr-adapter.schema
-                                        :operation :validate
-                                        :details (me/humanize explain)}))
+  (if-let [explain (m/explain HttpRequest m)]
+    (throw (error/info :invalid/schema
+                       {:message "Invalid HTTP Request map"
+                        :scope :ehr-adapter.schema
+                        :operation :validate
+                        :details (me/humanize explain)}))
+    m))
+
+(defn validate-mime-code-map
+  [m]
+  (if-let [explain (m/explain MimeCodeMap m)]
+    (throw (error/info :invalid/schema
+                       {:message "Invalid Content-Type map structure"
+                        :scope :ehr-adapter.schema
+                        :operation :validate
+                        :details (me/humanize explain)}))
     m))
