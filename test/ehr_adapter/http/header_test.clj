@@ -2,8 +2,6 @@
   (:require [clojure.test :refer [deftest is are testing]]
             [ehr-adapter.http.header :as header]))
 
-(def valid-mime-keywords [:json :fhir/json :form-url-encoded :xml :text :multipart])
-
 (deftest parse-mime-test
   (testing "Parsing registered and unsupported MIME types"
     (are [expected input] (= expected (header/parse-mime input))
