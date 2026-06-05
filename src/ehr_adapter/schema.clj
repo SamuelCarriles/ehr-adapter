@@ -79,7 +79,9 @@
    [:map
     [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
     [:private-key-path {:optional true} [:fn {:error/message "private-key-path must be a non-blank string"} not-blank-str?]]
-    [:private-key {:optional true} [:fn {:error/message "private-key must be a non-blank string"} not-blank-str?]]
+    [:private-key {:optional true} [:or
+                                    [:fn {:error/message "private-key must be a non-blank string"} not-blank-str?]
+                                    [:map-of :any :any]]]
     [:key-id [:fn {:error/message "key-id must be a non-blank string"} not-blank-str?]]
     [:algorithm [:fn {:error/message "algorithm must be a non-blank string"} not-blank-str?]]
     [:audience [:fn {:error/message "audience must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
