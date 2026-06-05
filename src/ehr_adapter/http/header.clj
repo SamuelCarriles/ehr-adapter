@@ -73,7 +73,7 @@
     :else
     (throw (error/info :invalid/format
                        {:message "Invalid mime-code format"
-                        :scope :ehr-adapter.middleware.header
+                        :scope :ehr-adapter.http.header
                         :operation :resolve-header
                         :value x
                         :expected [:or :keyword [:map
@@ -106,3 +106,16 @@
     (or (= :json code)
         (= :fhir/json code))))
 
+(defn authorization
+  [token token-type]
+  (when-not (and token token-type)
+    (let [missing-field (cond-> []
+                          (not token) (conj :token)
+                          (not token-type) (conj :token-type))]
+      (throw (error/info :missing/field
+                         {:message "The field :token, :token-type or both are missing"
+                          :scope :ehr-adapter.http.header
+                          :operation :resolve-header
+                          :field missing-field}))))
+
+  {"Authorization" (format "%s %s" token-type token)})

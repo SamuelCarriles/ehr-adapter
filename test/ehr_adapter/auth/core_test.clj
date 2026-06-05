@@ -1,6 +1,6 @@
-(ns ehr-adapter.auth-test
+(ns ehr-adapter.auth.core-test
   (:require [clojure.test :refer [is testing deftest]]
-            [ehr-adapter.auth :as auth]))
+            [ehr-adapter.auth.core :as auth]))
 
 (deftest bindings-test
   (let [mock-context {:tenant-data {:client-id "ecw-prod-99"
