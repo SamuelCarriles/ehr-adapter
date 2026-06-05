@@ -56,3 +56,11 @@
             :code code
             :details {:mime-code mime-code
                       :expected expected}}))
+
+(defmethod info :missing/field
+  [code {:keys [scope operation message field]}]
+  (ex-info message
+           {:scope scope
+            :operation operation
+            :code code
+            :details {:field field}}))

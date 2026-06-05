@@ -1,6 +1,7 @@
 .clj-kondo
 .cpcache
 .lsp
+.calva
 .nrepl-port
 docs/notes.md
 
