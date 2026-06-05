@@ -94,15 +94,9 @@
    [:client-secret [:fn {:error/message "client-secret must be a non-blank string"} not-blank-str?]]
    [:scopes {:optional true} [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]])
 
-(def ApiKey
-  [:map
-   [:api-key [:fn {:error/message "api-key must be a non-blank string"} not-blank-str?]]
-   [:client-id {:optional true} [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]])
-
 (def CustomAuth
   [:map
-   [:handler [:fn {:error/message "custom-auth-handler should be a Clojure function"} fn?]]
-   [:data {:optional true} [:map-of :any :any]]])
+   [:handler [:fn {:error/message "custom-auth-handler should be a Clojure function"} fn?]]])
 
 (def ExtractionPath
   [:vector [:or :string :keyword :int]])
@@ -119,7 +113,7 @@
 (def Authentication
   [:and
    [:map
-    [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :api-key :normalize :custom]]
+    [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :normalize :custom]]
     [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]
     [:options {:optional true}
      [:map
@@ -129,7 +123,6 @@
     [:basic-auth #'BasicAuth]
     [:smart-on-fhir/backend-services #'SmartOnFHIR]
     [:oauth2 #'OAuth2]
-    [:api-key #'ApiKey]
     [:normalize #'NormalizeMap]
     [:custom #'CustomAuth]]])
 

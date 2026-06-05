@@ -12,7 +12,7 @@
           response (handler coerced-req)]
       (assoc response :normalized? true))))
 
-(defn- mock-custom-auth-handler [_data]
+(defn- mock-custom-auth-handler [_layer _http-client]
   (fn [req] req))
 
 (defn- mock-get-token-fn []
@@ -32,13 +32,14 @@
 ;; =============================================================================
 
 (deftest valid-adapter-config-test
-  (testing "1. Pure connector adapter with the mandatory translation middleware"
+  (testing "1. Pure connector adapter with the mandatory translation middleware and basic auth"
     (let [config {:domain :eclinicalworks/tenant-alpha
                   :base-url "https://fhir.ecw.com/v1/fhir"
                   :http-client-fn mock-http-client
                   :middlewares [mock-translation-middleware]
-                  :auth [{:type :api-key
-                          :api-key "secret-key-123"}]}]
+                  :auth [{:type :basic-auth
+                          :username "integrator-user"
+                          :password "secret-pass-123"}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
   (testing "2. Multitenant adapter with standard OAuth2 credentials pipeline and dynamic operations"
@@ -63,16 +64,14 @@
                                 :base-headers {"Prefer" "respond-async"}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
-  (testing "3. Custom auth layer with live handler factory and unstructured data map"
+  (testing "3. Custom auth layer with live handler factory using options parameter"
     (let [config {:domain :epic/hospital-central-prod
                   :base-url "https://epic.hospital.org/api"
                   :http-client-fn mock-http-client
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :custom
                           :handler mock-custom-auth-handler
-                          :data {:session-id "sess_9901"
-                                 :sandbox? true
-                                 :arbitrary-nested-meta {:nested "value"}}}]}]
+                          :options {:request {:query-params {:sandbox true}}}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
   (testing "4. OAuth2 configuration with a valid and complex declarative :normalize map (Sugar + ExtractionPath)"
@@ -123,7 +122,7 @@
                                                     :query-params {:sandbox true}}}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
-  (testing "7. Dynamic/Hybrid :basic-auth supporting optional :token-url and base :payload (AdvancedMD use-case)"
+  (testing "7. Dynamic/Hybrid :basic-auth supporting optional base :payload (AdvancedMD use-case)"
     (let [config {:domain :advancedmd/tenant-dynamic-basic
                   :base-url "https://api.advancedmd.com/v2"
                   :http-client-fn mock-http-client
@@ -135,6 +134,7 @@
                                                 :url "https://api.advancedmd.com/oauth2/token"
                                                 :form-params {:alg "RS256"}}}}]}]
       (is (= config (schema/validate-adapter-config config))))))
+
 ;; =============================================================================
 ;; Invalid Configurations Tests (Schema Failures)
 ;; =============================================================================
@@ -145,7 +145,7 @@
                   :base-url "https://api.com"
                   :http-client-fn mock-http-client
                   :middlewares []
-                  :auth [{:type :api-key :api-key "123"}]}]
+                  :auth [{:type :basic-auth :username "u" :password "p"}]}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
@@ -156,7 +156,7 @@
                   :base-url "https://api.com"
                   :http-client-fn mock-http-client
                   :middlewares [mock-translation-middleware]
-                  :auth [{:type :api-key :api-key "123"}]}]
+                  :auth [{:type :basic-auth :username "u" :password "p"}]}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
@@ -169,7 +169,7 @@
         :base-url "https://api.com"
         :http-client-fn mock-http-client
         :middlewares [mock-translation-middleware]
-        :auth [{:type :api-key :api-key "123"}]
+        :auth [{:type :basic-auth :username "u" :password "p"}]
         :network-config {:timeout-ms 1000
                          :retries 3
                          :retry-strategy :linear}})
@@ -206,7 +206,7 @@
         :base-url "https://api.com"
         :http-client-fn mock-http-client
         :middlewares [mock-translation-middleware]
-        :auth [{:type :api-key :api-key "123"}]
+        :auth [{:type :basic-auth :username "u" :password "p"}]
         :operations [{:name :get-patient
                       :method :get
                       :path ["v1/Patient" "    " :id]}]})
@@ -222,7 +222,7 @@
                     :base-url "https://api.com/v1/"
                     :http-client-fn mock-http-client
                     :middlewares [mock-translation-middleware]
-                    :auth [{:type :api-key :api-key "123"}]}]
+                    :auth [{:type :basic-auth :username "u" :password "p"}]}]
         (try
           (schema/validate-adapter-config config)
           (is false "Expected ExceptionInfo due to trailing slash in base-url")
@@ -254,7 +254,7 @@
                   :base-url "https://api.com/v1"
                   :http-client-fn mock-http-client
                   :middlewares [mock-translation-middleware]
-                  :auth [{:type :api-key :api-key "123"}]
+                  :auth [{:type :basic-auth :username "u" :password "p"}]
                   :operations [{:name :get-patient
                                 :method :get
                                 :path ["/v1" "Patient/"]}]}]
@@ -304,7 +304,7 @@
   (testing "1. Valid instance generated"
     (let [config {:domain :eclinicalworks/tenant-alpha
                   :base-url "https://fhir.ecw.com/v1/fhir"
-                  :auth [{:type :api-key :api-key "secret-123"}]
+                  :auth [{:type :basic-auth :username "u" :password "p"}]
                   :operations [{:name :search-patient :path ["v1" :id] :method :get}]}
           instance (build-mock-instance config)]
       (is (= instance (schema/validate-adapter-instance instance)))))
@@ -314,7 +314,7 @@
                     :base-url  "https://fhir.ecw.com/v1/fhir"
                     :auth      {:state     {:not-an-atom true}
                                 :get-token mock-get-token-fn
-                                :config    [{:type :api-key :api-key "123"}]}
+                                :config    [{:type :basic-auth :username "u" :password "p"}]}
                     :operations {:search-patient (fn [_] {})}}]
       (try
         (schema/validate-adapter-instance instance)
@@ -329,7 +329,7 @@
                     :base-url  "https://fhir.ecw.com/v1/fhir"
                     :auth      {:state     (atom {})
                                 :get-token mock-get-token-fn
-                                :config    [{:type :api-key :api-key "123"}]}
+                                :config    [{:type :basic-auth :username "u" :password "p"}]}
                     :operations {:search-patient {:this-is-not "a function"}}}]
       (try
         (schema/validate-adapter-instance instance)
