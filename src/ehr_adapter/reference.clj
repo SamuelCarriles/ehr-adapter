@@ -29,7 +29,7 @@
   [ref-bindings form]
   (postwalk
    (fn [x]
-     (if (reference? x)
+     (if (and (reference? x) (map? ref-bindings))
        (let [k (keyword (name x))]
          (if (contains? ref-bindings k)
            (get ref-bindings k)
