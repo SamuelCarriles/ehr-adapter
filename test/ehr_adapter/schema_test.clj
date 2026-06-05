@@ -131,8 +131,9 @@
                   :auth [{:type      :basic-auth
                           :username  "adv-integrator"
                           :password  "super-secure-pass"
-                          :token-url "https://api.advancedmd.com/oauth2/token"
-                          :options   {:request {:form-params {:alg "RS256"}}}}]}]
+                          :options   {:request {:method :post
+                                                :url "https://api.advancedmd.com/oauth2/token"
+                                                :form-params {:alg "RS256"}}}}]}]
       (is (= config (schema/validate-adapter-config config))))))
 ;; =============================================================================
 ;; Invalid Configurations Tests (Schema Failures)
@@ -247,23 +248,6 @@
             (let [errors (:details (ex-data ex))
                   auth-errors (first (:auth errors))]
               (is (clojure.string/includes? (str auth-errors) "token-url must be a valid URL without a trailing slash"))))))))
-
-  (testing "Fails if dynamic basic-auth token-url contains a trailing slash"
-    (let [config {:domain :eclinicalworks/test-tenant
-                  :base-url "https://api.com/v1"
-                  :http-client-fn mock-http-client
-                  :middlewares [mock-translation-middleware]
-                  :auth [{:type      :basic-auth
-                          :username  "user"
-                          :password  "pass"
-                          :token-url "https://auth.com/token/"}]}]
-      (try
-        (schema/validate-adapter-config config)
-        (is false "Expected ExceptionInfo due to trailing slash in basic-auth token-url")
-        (catch clojure.lang.ExceptionInfo ex
-          (let [errors (:details (ex-data ex))
-                auth-errors (first (:auth errors))]
-            (is (clojure.string/includes? (str auth-errors) "token-url must be a valid URL without a trailing slash")))))))
 
   (testing "Operation configuration: Reject path segments starting or ending with \"/\""
     (let [config {:domain :eclinicalworks/test-tenant

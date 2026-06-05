@@ -71,8 +71,7 @@
 (def BasicAuth
   [:map
    [:username [:fn {:error/message "username must be a non-blank string"} not-blank-str?]]
-   [:password [:fn {:error/message "password must be a non-blank string"} not-blank-str?]]
-   [:token-url {:optional true} [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]])
+   [:password [:fn {:error/message "password must be a non-blank string"} not-blank-str?]]])
 
 (def SmartOnFHIR
   [:and
