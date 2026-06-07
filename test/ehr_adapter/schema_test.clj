@@ -143,7 +143,7 @@
                   :auth [{:type :smart-on-fhir/backend-services
                           :client-id "epic-client-123"
                           :key-id "key-prod-1"
-                          :algorithm "RS256"
+                          :algorithm :rs256
                           :scopes ["system/Patient.read"]
                           :audience "https://fhir.epic.com"
                           :token-url "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
@@ -158,7 +158,7 @@
                   :auth [{:type :smart-on-fhir/backend-services
                           :client-id "cerner-client-456"
                           :key-id "key-cerner-2"
-                          :algorithm "RS256"
+                          :algorithm :rs256
                           :scopes ["system/Observation.read"]
                           :audience "https://fhir.cerner.com"
                           :token-url "https://authorization.cerner.com/tenants/ec246c2b/protocols/oauth2/tokens"
@@ -225,7 +225,7 @@
                     :auth [{:type :smart-on-fhir/backend-services
                             :client-id "client-123"
                             :key-id "key-123"
-                            :algorithm "RS256"
+                            :algorithm :rs256
                             :scopes ["system/*.read"]
                             :audience "https://api.com"
                             :token-url "https://auth.com"}]}]
@@ -244,7 +244,7 @@
           :auth [{:type :smart-on-fhir/backend-services
                   :client-id "client-123"
                   :key-id "key-123"
-                  :algorithm "RS256"
+                  :algorithm :rs256
                   :scopes ["system/*.read"]
                   :audience "https://api.com"
                   :token-url "https://auth.com"
