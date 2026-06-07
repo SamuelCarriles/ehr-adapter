@@ -72,9 +72,9 @@
                   :form-params (cond-> {"grant_type" grant-type
                                         "client_id" client-id
                                         "client_secret" client-secret}
-                                 
+
                                  scope (assoc "scope" scope)
-                                 
+
                                  new-form-params
                                  (merge new-form-params))
                   :content-type :form-url-encoded}
@@ -97,13 +97,12 @@
         base-req {:method :post
                   :url token-url
                   :form-params (cond-> {"grant_type" "client_credentials"
-                                "client_assertion_type" "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-                                "client_assertion" client-assertion
-                                "scope" scope}
-                                
+                                        "client_assertion_type" "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+                                        "client_assertion" client-assertion
+                                        "scope" scope}
+
                                  new-form-params
-                                 (merge new-form-params)
-                                 )
+                                 (merge new-form-params))
                   :content-type :form-url-encoded}
         request (merge req-opts base-req)]
     (http-client request)))
@@ -111,4 +110,3 @@
 (defmethod execute :smart-on-fhir/backend-services
   [layer http-client]
   (smart-on-fhir-backend-services layer http-client))
-

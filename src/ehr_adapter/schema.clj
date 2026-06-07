@@ -124,14 +124,14 @@
    [:handler [:fn {:error/message "custom-auth-handler should be a Clojure function"} fn?]]])
 
 (def ExtractionPath
-  [:vector [:or :string :keyword :int]])
+  [:or :keyword :string [:vector [:or :string :keyword :int]]])
 
 (def NormalizeMap
   [:map
-   [:token {:optional true} [:or :keyword :string ExtractionPath]]
-   [:token-type {:optional true} [:or :keyword :string ExtractionPath]]
-   [:expires-in {:optional true} [:or :keyword :string ExtractionPath]]
-   [:refresh-token {:optional true} [:or :keyword :string ExtractionPath]]])
+   [:token {:optional true} ExtractionPath]
+   [:token-type {:optional true} ExtractionPath]
+   [:expires-in {:optional true} ExtractionPath]
+   [:refresh-token {:optional true} ExtractionPath]])
 
 ;; ===========================================================
 
@@ -139,7 +139,7 @@
   [:and
    [:map
     [:type [:enum :basic-auth :smart-on-fhir/backend-services :oauth2 :normalize :custom]]
-    [:bindings {:optional true} [:map-of :keyword [:vector [:or :keyword :string]]]]
+    [:bindings {:optional true} [:map-of :keyword ExtractionPath]]
     [:options {:optional true}
      [:map
       [:request {:optional true} HttpRequestOption]]]]

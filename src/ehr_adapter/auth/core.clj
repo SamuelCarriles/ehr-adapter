@@ -19,18 +19,33 @@
   (reduce-kv
 
    (fn [acc b p]
-     (if-let [v (get-in ctx p)]
-       (assoc acc b v)
-       acc))
+     (let [extract (if (vector? p) get-in get)
+           v (extract ctx p)]
+       (if (some? v)
+         (assoc acc b v)
+         acc)))
 
    {} paths))
+
+(defn full-context
+  [context bind-paths]
+  (cond-> context
+    (seq bind-paths)
+    (merge (bindings context bind-paths))))
+
+(defn normalize
+  [context layer]
+  (select-keys (full-context context (dissoc layer :type)) [:token :token-type :refresh-token :expires-in]))
 
 (defn process-layer
   "Prepares the authentication layer by resolving its dynamic bindings 
   against the context, merging the results, and then dispatches to the 
   corresponding authentication strategy execution."
   [context layer http-client]
-  (let [resolved-bindings (when-let [paths (:bindings layer)] (bindings context paths))
-        full-ctx (merge context resolved-bindings)
+  (let [layer-type (:type layer)
+        full-ctx (full-context context (:bindings layer))
         ready-layer (resolve-refs full-ctx (dissoc layer :bindings))]
-    (strategy/execute ready-layer http-client)))
+    (if (= :normalize layer-type)
+      (normalize full-ctx ready-layer)
+      (strategy/execute ready-layer http-client))))
+
