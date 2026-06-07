@@ -1,6 +1,7 @@
 (ns ehr-adapter.auth.strategy
   (:require [clojure.string :as str]
-            [ehr-adapter.http.header :as header])
+            [ehr-adapter.http.header :as header]
+            [ehr-adapter.auth.sign :as sign])
   (:import [java.util Base64]
            [java.nio.charset StandardCharsets]))
 
@@ -64,20 +65,50 @@
   merging optional headers or extra form parameters from options."
   [{:keys [token-url grant-type client-id client-secret scopes options]} http-client]
   (let [req-opts (:request options)
+        new-form-params (:form-params req-opts)
         scope (format-scopes scopes)
         base-req {:method :post
                   :url token-url
                   :form-params (cond-> {"grant_type" grant-type
                                         "client_id" client-id
                                         "client_secret" client-secret}
-                                 scope (assoc "scope" scope))
+                                 
+                                 scope (assoc "scope" scope)
+                                 
+                                 new-form-params
+                                 (merge new-form-params))
                   :content-type :form-url-encoded}
-        request (merge-with merge base-req (dissoc req-opts :method :url :body :content-type))]
+
+        request (merge req-opts base-req)]
     (http-client request)))
 
 (defmethod execute :oauth2
   [layer http-client]
   (oauth2 layer http-client))
 
-;; TODO: Smart On FHIR Strategy
+;; Smart On FHIR Strategy
+(defn smart-on-fhir-backend-services
+  "Executes the SMART on FHIR Backend Services authorization flow (asymmetric OAuth2 / RFC 7523)."
+  [{:keys [scopes token-url options] :as layer} http-client]
+  (let [req-opts (:request options)
+        new-form-params (:form-params req-opts)
+        client-assertion (sign/client-assertion layer)
+        scope (format-scopes scopes)
+        base-req {:method :post
+                  :url token-url
+                  :form-params (cond-> {"grant_type" "client_credentials"
+                                "client_assertion_type" "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+                                "client_assertion" client-assertion
+                                "scope" scope}
+                                
+                                 new-form-params
+                                 (merge new-form-params)
+                                 )
+                  :content-type :form-url-encoded}
+        request (merge req-opts base-req)]
+    (http-client request)))
+
+(defmethod execute :smart-on-fhir/backend-services
+  [layer http-client]
+  (smart-on-fhir-backend-services layer http-client))
 
