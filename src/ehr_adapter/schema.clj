@@ -3,6 +3,7 @@
             [malli.error :as me]
             [malli.util :as mu]
             [clojure.string :as str]
+            [buddy.sign.jws :as jws]
             [ehr-adapter.error :as error])
   (:import [org.apache.commons.validator.routines UrlValidator]))
 
@@ -88,6 +89,11 @@
 ;; ===========================================================
 ;; Auth Strategies or Layers (sub-schemas for Authentication)
 
+(defn supported-alg?
+  [alg]
+  (and (keyword? alg)
+       (contains? jws/+signers-map+ alg)))
+
 (def BasicAuth
   [:map
    [:username [:fn {:error/message "username must be a non-blank string"} not-blank-str?]]
@@ -100,7 +106,7 @@
                   [:fn {:error/message "private-key must be a non-blank string"} not-blank-str?]
                   PrivateJWK]]
    [:key-id [:fn {:error/message "key-id must be a non-blank string"} not-blank-str?]]
-   [:algorithm [:fn {:error/message "algorithm must be a non-blank string"} not-blank-str?]]
+   [:algorithm [:fn {:error/message "algorithm must be a keyword and a supported algorithm by buddy-sign library"} supported-alg?]]
    [:audience [:fn {:error/message "audience must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:scopes [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
    [:token-url [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]])
