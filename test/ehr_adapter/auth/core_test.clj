@@ -61,7 +61,7 @@
              (core/normalize network-response layer)))))
 
 ;; =============================================================================
-;; 3. PROCESS-LAYER TESTS (The Orchestrator Fork)
+;; 3. PROCESS-LAYER TESTS
 ;; =============================================================================
 
   (testing "When layer is a transport strategy -> dispatches correctly to strategy/execute"
@@ -86,7 +86,7 @@
           (is (= "data" (get form-params "local"))))))))
 
 ;; =============================================================================
-;; 4. FULL FLOW INTEGRATION TESTS (End-to-End Request Formulation)
+;; 4. FULL FLOW INTEGRATION TESTS
 ;; =============================================================================
 
 (deftest process-layer-full-flow-test

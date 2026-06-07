@@ -49,3 +49,17 @@
       (normalize full-ctx ready-layer)
       (strategy/execute ready-layer http-client))))
 
+(defn run
+  "Sequentially executes a pipeline of authentication layers.
+
+  Applies a `reduce` over `auth-layers`, passing the context map through
+  each layer along with the `http-client`. The result of processing a layer
+  becomes the input context for the next one.
+
+  Returns the final, fully transformed context map."
+  [initial-context auth-layers http-client]
+  (reduce
+   (fn [context layer]
+     (process-layer context layer http-client))
+   initial-context
+   auth-layers))
