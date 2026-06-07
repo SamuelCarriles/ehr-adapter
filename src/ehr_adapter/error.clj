@@ -48,6 +48,14 @@
                       :context context
                       :ref-bindings ref-bindings}}))
 
+(defmethod info :invalid/private-key
+  [code {:keys [scope operation message private-key]}]
+  (ex-info message
+           {:scope scope
+            :operation operation
+            :code code
+            :details  {:private-key private-key}}))
+
 (defmethod info :unsupported/mime-code
   [code {:keys [scope operation message mime-code expected]}]
   (ex-info message
@@ -55,6 +63,15 @@
             :operation operation
             :code code
             :details {:mime-code mime-code
+                      :expected expected}}))
+
+(defmethod info :unsupported/assertion-type
+  [code {:keys [scope operation message assertion-type expected]}]
+  (ex-info message
+           {:scope scope
+            :operation operation
+            :code code
+            :details {:assertion-type assertion-type
                       :expected expected}}))
 
 (defmethod info :missing/field

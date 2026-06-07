@@ -31,6 +31,11 @@
        (not (or (str/ends-with? segment "/")
                 (str/starts-with? segment "/"))))))
 
+(defn supported-alg?
+  [alg]
+  (and (keyword? alg)
+       (contains? jws/+signers-map+ alg)))
+
 ;; =======================================
 ;; Http Request
 
@@ -88,11 +93,6 @@
 
 ;; ===========================================================
 ;; Auth Strategies or Layers (sub-schemas for Authentication)
-
-(defn supported-alg?
-  [alg]
-  (and (keyword? alg)
-       (contains? jws/+signers-map+ alg)))
 
 (def BasicAuth
   [:map
