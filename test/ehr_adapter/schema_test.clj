@@ -133,6 +133,43 @@
                           :options   {:request {:method :post
                                                 :url "https://api.advancedmd.com/oauth2/token"
                                                 :form-params {:alg "RS256"}}}}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "8. SMART on FHIR Backend Services with explicit inline String PEM private key"
+    (let [config {:domain :epic/sandbox-smart-pem
+                  :base-url "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :smart-on-fhir/backend-services
+                          :client-id "epic-client-123"
+                          :key-id "key-prod-1"
+                          :algorithm "RS256"
+                          :scopes ["system/Patient.read"]
+                          :audience "https://fhir.epic.com"
+                          :token-url "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
+                          :private-key "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwgg..."}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "9. SMART on FHIR Backend Services with an inline parsed PrivateJWK Map (with optimization and metadata fields)"
+    (let [config {:domain :cerner/sandbox-smart-jwk
+                  :base-url "https://fhir.cerner.com/r4/ec246c2b"
+                  :http-client-fn mock-http-client
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :smart-on-fhir/backend-services
+                          :client-id "cerner-client-456"
+                          :key-id "key-cerner-2"
+                          :algorithm "RS256"
+                          :scopes ["system/Observation.read"]
+                          :audience "https://fhir.cerner.com"
+                          :token-url "https://authorization.cerner.com/tenants/ec246c2b/protocols/oauth2/tokens"
+                          :private-key {:kty "RSA"
+                                        :alg "RS256"
+                                        :kid "key-cerner-2"
+                                        :n "u1WhN..."
+                                        :e "AQAB"
+                                        :d "G4n7X..."
+                                        :p "9_3A1..."
+                                        :q "8_mP4..."}}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -179,25 +216,44 @@
           (is (some #(str/includes? % "If you configure :retries, you must provide :retry-delay-ms")
                     (:network-config errors)))))))
 
-  (testing "SMART on FHIR logical error (mutual exclusion violation)"
-    (try
-      (schema/validate-adapter-config
-       {:domain :eclinicalworks/test-tenant
-        :base-url "https://api.com"
-        :http-client-fn mock-http-client
-        :middlewares [mock-translation-middleware]
-        :auth [{:type :smart-on-fhir/backend-services
-                :client-id "client-123"
-                :key-id "key-123"
-                :algorithm "RS256"
-                :scopes ["system/*.read"]
-                :token-url "https://auth.com"
-                :private-key-path "/etc/keys/fhir.pem"
-                :private-key "-----BEGIN PRIVATE KEY-----\n..."}]})
-      (is false "Expected ExceptionInfo due to exclusive key constraint")
-      (catch clojure.lang.ExceptionInfo ex
-        (let [errors (:details (ex-data ex))]
-          (is (some? errors))))))
+  (testing "SMART on FHIR configuration errors (missing mandate :private-key or invalid type)"
+    (testing "Fails when :private-key is completely omitted"
+      (let [config {:domain :eclinicalworks/test-tenant
+                    :base-url "https://api.com"
+                    :http-client-fn mock-http-client
+                    :middlewares [mock-translation-middleware]
+                    :auth [{:type :smart-on-fhir/backend-services
+                            :client-id "client-123"
+                            :key-id "key-123"
+                            :algorithm "RS256"
+                            :scopes ["system/*.read"]
+                            :audience "https://api.com"
+                            :token-url "https://auth.com"}]}]
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Invalid Adapter configuration"
+             (schema/validate-adapter-config config)))))
+
+    (testing "Fails when :private-key is a map but represents a PublicJWK instead of PrivateJWK (missing :d)"
+      (try
+        (schema/validate-adapter-config
+         {:domain :eclinicalworks/test-tenant
+          :base-url "https://api.com"
+          :http-client-fn mock-http-client
+          :middlewares [mock-translation-middleware]
+          :auth [{:type :smart-on-fhir/backend-services
+                  :client-id "client-123"
+                  :key-id "key-123"
+                  :algorithm "RS256"
+                  :scopes ["system/*.read"]
+                  :audience "https://api.com"
+                  :token-url "https://auth.com"
+                  :private-key {:kty "RSA" :alg "RS256" :n "u1Wh" :e "AQAB"}}]})
+        (is false "Expected ExceptionInfo due to invalid JWK type")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))
+                auth-errors (first (:auth errors))]
+            (is (some? auth-errors)))))))
 
   (testing "Operation configuration contains a blank string path segment"
     (try
@@ -385,3 +441,36 @@
                :headers {:Authorization "Bearer xyz"
                          "X-Int-Header" 42}}]
       (is (= req (schema/validate-http-request req))))))
+
+;; =============================================================================
+;; JWK Schemas Tests
+;; =============================================================================
+
+(deftest jwk-schemas-test
+  (testing "1. Valid PublicJWK structure passing through validation"
+    (let [pub-jwk {:kty "RSA"
+                   :alg "RS256"
+                   :n "u1WhN"
+                   :e "AQAB"
+                   :kid "optional-key-id-metadata"}]
+      (is (= pub-jwk (schema/validate-public-jwk pub-jwk)))))
+
+  (testing "2. Valid PrivateJWK structure with mandatory components"
+    (let [priv-jwk {:kty "RSA"
+                    :alg "RS256"
+                    :n "u1WhN"
+                    :e "AQAB"
+                    :d "G4n7X"
+                    :p "optional-factor"}]
+      (is (= priv-jwk (schema/validate-private-jwk priv-jwk)))))
+
+  (testing "3. Invalid JWK structures (Expected ExceptionInfo)"
+    (testing "Fails PublicJWK if an essential key like :n is blank"
+      (let [bad-jwk {:kty "RSA" :alg "RS256" :n "    " :e "AQAB"}]
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (schema/validate-public-jwk bad-jwk)))))
+
+    (testing "Fails PrivateJWK if it only contains the public parameters (missing :d)"
+      (let [bad-priv {:kty "RSA" :alg "RS256" :n "u1WhN" :e "AQAB"}]
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (schema/validate-private-jwk bad-priv)))))))
