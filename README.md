@@ -20,41 +20,50 @@ The library's architecture stands on three core pillars:
 
 ### 1. Data-Driven Architecture
 
-In `ehr-adapter`, **everything is a Clojure map**. There are no rigid classes, complex objects, or hidden configurations. The entire adapter infrastructure—from how you log in to the definition of clinical endpoints—is declared using native, transparent, and easy-to-audit data structures.
+In `ehr-adapter`, **everything is a Clojure map**. There are no rigid classes, complex objects, or hidden configurations. The entire adapter infrastructure—from how you log in to the definition of clinical endpoints—is declared using native, transparent, and easy-to-audit data structures validated strictly at runtime via Malli.
 
 ### 2. Inverted & Decoupled Flow (`:bindings`)
 
-Instead of building complex middlewares that blindly "push" data from one function to another, the library implements a declarative **inverted resolution (_pull_)** pattern. The layers that need information explicitly declare what data they need to extract from the global context using a `:bindings` map. This keeps the library core 100% decoupled and ready to tame complex or hybrid authentication pipelines.
+Instead of building complex hardcoded middlewares that blindly "push" data from one function to another, the library implements a declarative **inverted resolution (_pull_)** pattern. The layers that need information explicitly declare what data they need to extract from the global context using a `:bindings` map. This keeps the library core 100% decoupled and ready to tame complex or hybrid authentication pipelines.
 
 ### 3. Dynamic Endpoint Compilation
 
-You define pure data templates for your operations (e.g., `["v1/Patient" :ref/patientId]`), and the `ehr-adapter` engine compiles them on the fly into safe, highly efficient Clojure functions that are rigorously validated at runtime.
+You define pure data templates for your operations (e.g., `["v1/Patient" :ref/patientId]`), and the `ehr-adapter` engine compiles them on the fly into safe, highly efficient Clojure functions that are rigorously validated against strict contracts.
 
 ## Quick Glance
 
-This is how explicit and readable an adapter configuration looks in your system:
+This is how explicit, robust, and readable an adapter configuration looks using **Babashka's HTTP client** as the core transportation layer:
 
 ```clojure
-(require '[ehr-adapter.core :as ehr])
+(require '[ehr-adapter.core :as ehr]
+         '[babashka.http-client :as http])
 
-;; 1. Define the declarative configuration for your tenant
 (def eclinicalworks-adapter-config
   {:domain :eclinicalworks/tenant-beta
-   :base-url "https://api.interop-ehr.com/v2"
-   :http-client-fn clj-http.client/request
-   :middlewares [ehr-adapter.middleware/clj-http-client]
 
-   ;; Sequential authentication pipeline
+   :base-url "[https://api.interop-ehr.com/v2](https://api.interop-ehr.com/v2)"
+
+   :network-config {:request-handler babashka.http-client/request
+                    :timeout-ms 5000
+                    :retries 3
+                    :retry-delay-ms 200
+                    :retry-strategy :exponential
+                    :retry-on [500 502 503 504]
+                    :refresh-token-on [401]}
+
+   :middlewares [ehr-adapter.middleware.bb-http-client/wrap-http-client]
+
    :auth [{:type          :oauth2
            :token-url     "https://auth.interop-ehr.com/v2/oauth2/token"
            :grant-type    "client_credentials"
-           :client-id     "prod-client-id-xyz"
+           :client-id      "prod-client-id-xyz"
            :client-secret "super-secure-secret"}]
 
    ;; Operations that will be compiled into executable functions
    :operations [{:name :search-patient
                  :method :get
                  :path ["v1/Patient" :ref/patientId]
+                 :expected-status [200 206]
                  :description "Search for a patient using their unique identifier."}]})
 
 ;; 2. Initialize the engine
@@ -65,14 +74,6 @@ This is how explicit and readable an adapter configuration looks in your system:
 
 ```
 
-## Flexible Configuration Storage
-
-The adapter configuration is designed to be fully versatile. It can be declared directly inline within your application code as a native Clojure map, or decoupled entirely by storing it inside an external `ehr_adapters.edn` file (or any other specified file) for cleaner environment management and structural isolation.
-
 ## Complete Configuration Guide
 
 To understand the exact structure of the configuration map, the data types supported by the validator, the behavior of the network resiliency engine, and the exhaustive breakdown of each authentication strategy (including advanced usage of `:bindings`), please check the official technical reference guide at: **[`Configuration Reference Guide`](https://github.com/SamuelCarriles/ehr-adapter/wiki/Adapter-Configuration-Guide)**
-
-## 📋 Project Status
-
-Currently, `ehr-adapter` is under active development. The current focus is locking down the validation engine using Malli and robustly stabilizing the sequential authentication pipeline to fully support flows like `:api-key`, `:basic-auth`, `:oauth2`, and `:smart-on-fhir/backend-services`.
