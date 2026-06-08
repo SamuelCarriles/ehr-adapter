@@ -31,20 +31,20 @@
               :id "pat-991"
               :meta {:encounter "enc-004"}
               :tags ["active" :static-tag]}
-             (ref/resolve-refs bindings template)))))
+             (ref/resolve bindings template)))))
 
   (testing "Leaves untouched keywords that are not in the :ref namespace"
     (let [bindings {:id "123"}
           template [:v1 :Patient :ref/id :some/other-key]]
       (is (= [:v1 :Patient "123" :some/other-key]
-             (ref/resolve-refs bindings template)))))
+             (ref/resolve bindings template)))))
 
   (testing "Throws ExceptionInfo when a reference cannot be resolved"
     (let [bindings {:wrongKey "value"}
           template {:path ["v1" "Patient" :ref/missingId]}]
 
       (try
-        (ref/reference? (ref/resolve-refs bindings template))
+        (ref/reference? (ref/resolve bindings template))
         (is false "Expected ExceptionInfo to be thrown due to missing binding")
         (catch clojure.lang.ExceptionInfo ex
           (let [ex-msg  (.getMessage ex)

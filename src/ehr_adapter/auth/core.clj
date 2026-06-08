@@ -1,6 +1,6 @@
 (ns ehr-adapter.auth.core
   (:require [ehr-adapter.auth.strategy :as strategy]
-            [ehr-adapter.reference :refer [resolve-refs]]))
+            [ehr-adapter.reference :refer [resolve]]))
 
 (defn bindings
   "Resolves a map of dynamic paths against the given context map.
@@ -44,7 +44,7 @@
   [context layer http-client]
   (let [layer-type (:type layer)
         full-ctx (full-context context (:bindings layer))
-        ready-layer (resolve-refs full-ctx (dissoc layer :bindings))]
+        ready-layer (resolve full-ctx (dissoc layer :bindings))]
     (if (= :normalize layer-type)
       (normalize full-ctx ready-layer)
       (strategy/execute ready-layer http-client))))

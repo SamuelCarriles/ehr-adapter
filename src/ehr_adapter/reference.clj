@@ -1,6 +1,7 @@
 (ns ehr-adapter.reference
   (:require [clojure.walk :refer [postwalk]]
-            [ehr-adapter.error :as error]))
+            [ehr-adapter.error :as error]
+            [clojure.core :exclude [resolve]]))
 
 (defn reference?
   "Returns true if x is a keyword with the namespace 'ref' 
@@ -9,7 +10,7 @@
   (and (keyword? x)
        (= "ref" (namespace x))))
 
-(defn resolve-refs
+(defn resolve
   "Recursively traverses the given `form` (maps, vectors, lists, etc.) 
   and replaces any placeholder keyword matching the format :ref/variable-name 
   with its corresponding runtime value extracted from `ref-bindings`.
