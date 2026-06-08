@@ -3,8 +3,11 @@
             [ehr-adapter.schema :as schema]
             [clojure.string :as str]))
 
-(defn- mock-http-client [_req]
+(defn- mock-http-request-handler [_req]
   {:status 200 :body "OK"})
+
+(defn- mock-client-builder [_config]
+  {:client-instance :mocked-connection-pool})
 
 (defn- mock-translation-middleware [handler]
   (fn [req]
@@ -32,31 +35,33 @@
 ;; =============================================================================
 
 (deftest valid-adapter-config-test
-  (testing "1. Pure connector adapter with the mandatory translation middleware and basic auth"
+  (testing "1. Pure connector adapter with the mandatory translation middleware, network config and basic auth"
     (let [config {:domain :eclinicalworks/tenant-alpha
                   :base-url "https://fhir.ecw.com/v1/fhir"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :basic-auth
                           :username "integrator-user"
                           :password "secret-pass-123"}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
-  (testing "2. Multitenant adapter with standard OAuth2 credentials pipeline and dynamic operations"
+  (testing "2. Multitenant adapter with standard OAuth2 credentials pipeline, full network-config and dynamic operations"
     (let [config {:domain :eclinicalworks/tenant-beta
                   :base-url "https://api.eclinicalworks.com/v2"
-                  :http-client-fn mock-http-client
+                  :network-config {:timeout-ms 5000
+                                   :retries 3
+                                   :retry-delay-ms 200
+                                   :retry-strategy :exponential
+                                   :retry-on [500 502 503 504]
+                                   :refresh-token-on [401]
+                                   :client-builder mock-client-builder
+                                   :request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type          :oauth2
                           :token-url     "https://auth.eclinicalworks.com/oauth/token"
                           :grant-type    "client_credentials"
                           :client-id      "ecw-client-id-prod"
                           :client-secret "ecw-client-secret-secure-123"}]
-                  :network-config {:timeout-ms 5000
-                                   :retries 3
-                                   :retry-delay-ms 200
-                                   :retry-strategy :exponential
-                                   :refresh-token-on [401]}
                   :operations [{:name :search-patient
                                 :path ["v1/Patient" :ref/patientId]
                                 :method :get
@@ -67,7 +72,7 @@
   (testing "3. Custom auth layer with live handler factory using options parameter"
     (let [config {:domain :epic/hospital-central-prod
                   :base-url "https://epic.hospital.org/api"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :custom
                           :handler mock-custom-auth-handler
@@ -77,7 +82,7 @@
   (testing "4. OAuth2 configuration with a valid and complex declarative :normalize map (Sugar + ExtractionPath)"
     (let [config {:domain :eclinicalworks/tenant-normalize-valid
                   :base-url "https://api.eclinicalworks.com/v2"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type          :oauth2
                           :token-url     "https://auth.eclinicalworks.com/oauth/token"
@@ -94,7 +99,7 @@
   (testing "5. Normalization layer completely implicit (Malli should accept empty map since all keys are optional)"
     (let [config {:domain :eclinicalworks/tenant-normalize-empty
                   :base-url "https://api.eclinicalworks.com/v2"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :oauth2
                           :token-url "https://auth.eclinicalworks.com/oauth/token"
@@ -107,7 +112,7 @@
   (testing "6. Global :payload validation using heterogeneous structures ([:map-of :any :any])"
     (let [config {:domain :advancedmd/tenant-payload-heterogeneous
                   :base-url "https://api.advancedmd.com/v2"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type          :oauth2
                           :token-url     "https://api.advancedmd.com/oauth2/token"
@@ -125,7 +130,7 @@
   (testing "7. Dynamic/Hybrid :basic-auth supporting optional base :payload (AdvancedMD use-case)"
     (let [config {:domain :advancedmd/tenant-dynamic-basic
                   :base-url "https://api.advancedmd.com/v2"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type      :basic-auth
                           :username  "adv-integrator"
@@ -138,7 +143,7 @@
   (testing "8. SMART on FHIR Backend Services with explicit inline String PEM private key"
     (let [config {:domain :epic/sandbox-smart-pem
                   :base-url "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :smart-on-fhir/backend-services
                           :client-id "epic-client-123"
@@ -153,7 +158,7 @@
   (testing "9. SMART on FHIR Backend Services with an inline parsed PrivateJWK Map (with optimization and metadata fields)"
     (let [config {:domain :cerner/sandbox-smart-jwk
                   :base-url "https://fhir.cerner.com/r4/ec246c2b"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :smart-on-fhir/backend-services
                           :client-id "cerner-client-456"
@@ -180,7 +185,7 @@
   (testing "Missing mandatory translation middleware (empty vector)"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares []
                   :auth [{:type :basic-auth :username "u" :password "p"}]}]
       (is (thrown-with-msg?
@@ -191,7 +196,7 @@
   (testing "Domain missing its namespace (violates multitenant routing design)"
     (let [config {:domain :flat-keyword-without-namespace
                   :base-url "https://api.com"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :basic-auth :username "u" :password "p"}]}]
       (is (thrown-with-msg?
@@ -199,28 +204,62 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Resiliency policy contradiction (:retries present without :retry-delay-ms)"
-    (try
-      (schema/validate-adapter-config
-       {:domain :eclinicalworks/test-tenant
-        :base-url "https://api.com"
-        :http-client-fn mock-http-client
-        :middlewares [mock-translation-middleware]
-        :auth [{:type :basic-auth :username "u" :password "p"}]
-        :network-config {:timeout-ms 1000
-                         :retries 3
-                         :retry-strategy :linear}})
-      (is false "Expected ExceptionInfo to be thrown")
-      (catch clojure.lang.ExceptionInfo ex
-        (let [errors (:details (ex-data ex))]
-          (is (some #(str/includes? % "If you configure :retries, you must provide :retry-delay-ms")
-                    (:network-config errors)))))))
+  (testing "Network configuration validation failures"
+    (testing "Fails if :network-config is completely missing in root map"
+      (let [config {:domain :eclinicalworks/test-tenant
+                    :base-url "https://api.com"
+                    :middlewares [mock-translation-middleware]
+                    :auth [{:type :basic-auth :username "u" :password "p"}]}]
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Invalid Adapter configuration"
+             (schema/validate-adapter-config config)))))
+
+    (testing "Fails if :request-handler inside :network-config is missing"
+      (let [config {:domain :eclinicalworks/test-tenant
+                    :base-url "https://api.com"
+                    :network-config {:timeout-ms 2000}
+                    :middlewares [mock-translation-middleware]
+                    :auth [{:type :basic-auth :username "u" :password "p"}]}]
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Invalid Adapter configuration"
+             (schema/validate-adapter-config config)))))
+
+    (testing "Resiliency policy contradiction (:retries present without :retry-delay-ms)"
+      (try
+        (schema/validate-adapter-config
+         {:domain :eclinicalworks/test-tenant
+          :base-url "https://api.com"
+          :middlewares [mock-translation-middleware]
+          :auth [{:type :basic-auth :username "u" :password "p"}]
+          :network-config {:request-handler mock-http-request-handler
+                           :timeout-ms 1000
+                           :retries 3
+                           :retry-strategy :linear}})
+        (is false "Expected ExceptionInfo to be thrown")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))]
+            (is (some #(str/includes? % "If you configure :retries, you must provide :retry-delay-ms")
+                      (:network-config errors)))))))
+
+    (testing "Fails if HTTP status codes in :retry-on are out of range (100-599)"
+      (let [config {:domain :eclinicalworks/test-tenant
+                    :base-url "https://api.com"
+                    :middlewares [mock-translation-middleware]
+                    :auth [{:type :basic-auth :username "u" :password "p"}]
+                    :network-config {:request-handler mock-http-request-handler
+                                     :retry-on [99 600]}}]
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Invalid Adapter configuration"
+             (schema/validate-adapter-config config))))))
 
   (testing "SMART on FHIR configuration errors (missing mandate :private-key or invalid type)"
     (testing "Fails when :private-key is completely omitted"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com"
-                    :http-client-fn mock-http-client
+                    :network-config {:request-handler mock-http-request-handler}
                     :middlewares [mock-translation-middleware]
                     :auth [{:type :smart-on-fhir/backend-services
                             :client-id "client-123"
@@ -239,7 +278,7 @@
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
           :base-url "https://api.com"
-          :http-client-fn mock-http-client
+          :network-config {:request-handler mock-http-request-handler}
           :middlewares [mock-translation-middleware]
           :auth [{:type :smart-on-fhir/backend-services
                   :client-id "client-123"
@@ -260,7 +299,7 @@
       (schema/validate-adapter-config
        {:domain :eclinicalworks/test-tenant
         :base-url "https://api.com"
-        :http-client-fn mock-http-client
+        :network-config {:request-handler mock-http-request-handler}
         :middlewares [mock-translation-middleware]
         :auth [{:type :basic-auth :username "u" :password "p"}]
         :operations [{:name :get-patient
@@ -276,7 +315,7 @@
     (testing "Fails if base-url contains a trailing slash"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com/v1/"
-                    :http-client-fn mock-http-client
+                    :network-config {:request-handler mock-http-request-handler}
                     :middlewares [mock-translation-middleware]
                     :auth [{:type :basic-auth :username "u" :password "p"}]}]
         (try
@@ -290,7 +329,7 @@
     (testing "Fails if auth token-url contains a trailing slash"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com/v1"
-                    :http-client-fn mock-http-client
+                    :network-config {:request-handler mock-http-request-handler}
                     :middlewares [mock-translation-middleware]
                     :auth [{:type :oauth2
                             :token-url "https://auth.com/token/"
@@ -308,7 +347,7 @@
   (testing "Operation configuration: Reject path segments starting or ending with \"/\""
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com/v1"
-                  :http-client-fn mock-http-client
+                  :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type :basic-auth :username "u" :password "p"}]
                   :operations [{:name :get-patient
@@ -329,7 +368,7 @@
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
           :base-url "https://api.com/v1"
-          :http-client-fn mock-http-client
+          :network-config {:request-handler mock-http-request-handler}
           :middlewares [mock-translation-middleware]
           :auth [{:type    :normalize
                   :token   12345}]})
@@ -343,7 +382,7 @@
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
           :base-url "https://api.com/v1"
-          :http-client-fn mock-http-client
+          :network-config {:request-handler mock-http-request-handler}
           :middlewares [mock-translation-middleware]
           :auth [{:type    :normalize
                   :token   {:path [:body :token]}}]})

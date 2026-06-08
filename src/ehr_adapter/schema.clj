@@ -167,7 +167,9 @@
                                        :linear :exponential]]
     [:refresh-token-on {:optional true}
      [:vector {:error/message "refresh-token-on must be a vector of valid HTTP status codes (100-599)"}
-      [:int {:min 100 :max 599}]]]]])
+      [:int {:min 100 :max 599}]]]
+    [:client-builder {:optional true} [:fn {:error/message "client-builder must be a Clojure function"} fn?]]
+    [:request-handler [:fn {:error/message "request-handler must be a Clojure function"} fn?]]]])
 
 (def Operation
   [:map
@@ -184,11 +186,10 @@
   [:map {:closed true}
    [:domain :qualified-keyword]
    [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
-   [:http-client-fn [:fn {:error/message "http-client-fn must be a Clojure function"} fn?]]
    [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
    [:auth
     [:vector Authentication]]
-   [:network-config {:optional true} NetworkConfiguration]
+   [:network-config NetworkConfiguration]
    [:operations {:optional true}
     [:vector Operation]]])
 
