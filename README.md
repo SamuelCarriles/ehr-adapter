@@ -63,14 +63,13 @@ This is how explicit, robust, and readable an adapter configuration looks using 
    :operations [{:name :search-patient
                  :method :get
                  :path ["v1/Patient" :ref/patientId]
-                 :expected-status [200 206]
                  :description "Search for a patient using their unique identifier."}]})
 
 ;; 2. Initialize the engine
-(def client (ehr/initialize eclinicalworks-adapter-config))
+(def adapter (ehr/initialize eclinicalworks-adapter-config))
 
 ;; 3. Invoke the operation cleanly within your business logic
-(ehr/invoke client :search-patient {:patientId "12345"})
+(ehr/invoke adapter :search-patient {:patientId "12345"})
 
 ```
 
