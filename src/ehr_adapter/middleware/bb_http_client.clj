@@ -29,7 +29,7 @@
         (cond->
          content-type (assoc :content-type (h/parse-mime content-type))))))
 
-(defn wrap-bb-http-client
+(defn wrap-request-handler
 
   [handler]
   (fn [req]

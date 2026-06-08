@@ -43,13 +43,7 @@ This is how explicit, robust, and readable an adapter configuration looks using 
 
    :base-url "https://api.interop-ehr.com/v2"
 
-   :network-config {:request-handler babashka.http-client/request
-                    :timeout-ms 5000
-                    :retries 3
-                    :retry-delay-ms 200
-                    :retry-strategy :exponential
-                    :retry-on [500 502 503 504]
-                    :refresh-token-on [401]}
+   :network-config {:request-handler babashka.http-client/request}
 
    :middlewares [ehr-adapter.middleware.bb-http-client/wrap-request-handler]
 

@@ -1,6 +1,6 @@
 (ns ehr-adapter.middleware.bb-http-client-test
   (:require [clojure.test :refer [deftest is testing]]
-            [ehr-adapter.middleware.bb-http-client :refer [->bb-req <-bb-response wrap-bb-http-client]]))
+            [ehr-adapter.middleware.bb-http-client :refer [->bb-req <-bb-response wrap-request-handler]]))
 
 ;; =============================================================================
 ;; ->bb-req Tests
@@ -89,7 +89,7 @@
                      :headers {"content-type" "application/json"
                                "server" "nginx"}
                      :request bb-req})
-          wrapped (wrap-bb-http-client handler)
+          wrapped (wrap-request-handler handler)
           result (wrapped {:method :get
                            :url "https://api.ehr.com/Patient"
                            :timeout-ms 3000
@@ -105,7 +105,7 @@
                      :body ""
                      :headers {}
                      :request bb-req})
-          wrapped (wrap-bb-http-client handler)
+          wrapped (wrap-request-handler handler)
           result (wrapped {:method :post
                            :url "https://api.ehr.com/Patient"
                            :timeout-ms 5000
@@ -127,7 +127,7 @@
                      :body "{\"error\": \"unauthorized\"}"
                      :headers {"content-type" "application/json"}
                      :request bb-req})
-          wrapped (wrap-bb-http-client handler)]
+          wrapped (wrap-request-handler handler)]
       (try
         (wrapped {:method :get :url "https://api.ehr.com/Patient"})
         (is false "Should have thrown an exception")
@@ -145,7 +145,7 @@
                      :body "{\"issue\": \"not found\"}"
                      :headers {"content-type" "application/json"}
                      :request bb-req})
-          wrapped (wrap-bb-http-client handler)
+          wrapped (wrap-request-handler handler)
           result (wrapped {:method :get
                            :url "https://api.ehr.com/Patient"
                            :expected-status [404]})]
@@ -156,7 +156,7 @@
   (testing "Hard JVM network exception is unified under :http/failure"
     (let [handler (fn [_]
                     (throw (java.net.ConnectException. "Connection refused")))
-          wrapped (wrap-bb-http-client handler)]
+          wrapped (wrap-request-handler handler)]
       (try
         (wrapped {:method :get :url "https://api.ehr.com/Patient"})
         (is false "Should have thrown an exception")
