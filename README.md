@@ -41,7 +41,7 @@ This is how explicit, robust, and readable an adapter configuration looks using 
 (def eclinicalworks-adapter-config
   {:domain :eclinicalworks/tenant-beta
 
-   :base-url "[https://api.interop-ehr.com/v2](https://api.interop-ehr.com/v2)"
+   :base-url "https://api.interop-ehr.com/v2"
 
    :network-config {:request-handler babashka.http-client/request
                     :timeout-ms 5000
@@ -51,7 +51,7 @@ This is how explicit, robust, and readable an adapter configuration looks using 
                     :retry-on [500 502 503 504]
                     :refresh-token-on [401]}
 
-   :middlewares [ehr-adapter.middleware.bb-http-client/wrap-http-client]
+   :middlewares [ehr-adapter.middleware.bb-http-client/wrap-request-handler]
 
    :auth [{:type          :oauth2
            :token-url     "https://auth.interop-ehr.com/v2/oauth2/token"
