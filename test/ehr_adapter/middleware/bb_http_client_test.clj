@@ -119,3 +119,52 @@
       (is (= "application/fhir+json" (get-in bb-req [:headers "Content-Type"])))
       (is (nil? (:url bb-req)))
       (is (nil? (:timeout-ms bb-req))))))
+
+(deftest wrap-bb-http-client-errors-test
+  (testing "Unsuccessful HTTP status throws structured :http/failure error"
+    (let [handler (fn [bb-req]
+                    {:status 401
+                     :body "{\"error\": \"unauthorized\"}"
+                     :headers {"content-type" "application/json"}
+                     :request bb-req})
+          wrapped (wrap-bb-http-client handler)]
+      (try
+        (wrapped {:method :get :url "https://api.ehr.com/Patient"})
+        (is false "Should have thrown an exception")
+        (catch clojure.lang.ExceptionInfo e
+          (let [err-data (ex-data e)]
+            (is (= :http/failure (:code err-data)))
+            (is (= :ehr-adapter.middleware.bb-http-client (:scope err-data)))
+            (is (= 401 (get-in err-data [:details :status])))
+            (is (= "{\"error\": \"unauthorized\"}" (get-in err-data [:details :error-body])))
+            (is (= [:standard-2xx] (get-in err-data [:details :expected-status]))))))))
+
+  (testing "HTTP status marked as :expected-status does not throw an error"
+    (let [handler (fn [bb-req]
+                    {:status 404
+                     :body "{\"issue\": \"not found\"}"
+                     :headers {"content-type" "application/json"}
+                     :request bb-req})
+          wrapped (wrap-bb-http-client handler)
+          result (wrapped {:method :get
+                           :url "https://api.ehr.com/Patient"
+                           :expected-status [404]})]
+      (is (= 404 (:status result)))
+      (is (= "{\"issue\": \"not found\"}" (:body result)))
+      (is (= "https://api.ehr.com/Patient" (get-in result [:request :uri])))))
+
+  (testing "Hard JVM network exception is unified under :http/failure"
+    (let [handler (fn [_]
+                    (throw (java.net.ConnectException. "Connection refused")))
+          wrapped (wrap-bb-http-client handler)]
+      (try
+        (wrapped {:method :get :url "https://api.ehr.com/Patient"})
+        (is false "Should have thrown an exception")
+        (catch clojure.lang.ExceptionInfo e
+          (let [err-data (ex-data e)
+                exception (get-in err-data [:details :exception])]
+            (is (= :http/failure (:code err-data)))
+            (is (= :ehr-adapter.middleware.bb-http-client (:scope err-data)))
+            (is (= :http-request (:operation err-data)))
+            (is (instance? java.net.ConnectException exception))
+            (is (= "Connection refused" (.getMessage exception)))))))))

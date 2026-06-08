@@ -81,3 +81,15 @@
             :operation operation
             :code code
             :details {:field field}}))
+
+(defmethod info :http/failure
+  [code {:keys [scope operation message status error-body expected-status exception]}]
+  (ex-info message
+           {:scope     scope
+            :operation operation
+            :code      code
+            :details   (cond-> {}
+                         status          (assoc :status status)
+                         error-body      (assoc :error-body error-body)
+                         expected-status (assoc :expected-status expected-status)
+                         exception       (assoc :exception exception))}))

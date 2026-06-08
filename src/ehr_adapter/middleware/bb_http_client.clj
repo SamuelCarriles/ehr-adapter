@@ -1,7 +1,9 @@
 (ns ehr-adapter.middleware.bb-http-client
   (:require
    [clojure.set :as set]
-   [ehr-adapter.http.header :as h]))
+   [ehr-adapter.http.header :as h]
+   [ehr-adapter.http.core :refer [success?]]
+   [ehr-adapter.error :as error]))
 
 (def motor-keys->bb-keys
   {:url :uri
@@ -31,8 +33,26 @@
 
   [handler]
   (fn [req]
-    (-> req
-        ->bb-req
-        handler
-        <-bb-response)))
+    (let [bb-req (->bb-req req)
+          response (try
+                     (handler bb-req)
+                     (catch Exception e
+                       (throw (error/info :http/failure
+                                          {:message (.getMessage e)
+                                           :scope :ehr-adapter.middleware.bb-http-client
+                                           :operation :http-request
+                                           :exception e}))))
+          {:keys [status body]} response
+          expected-status (:expected-status req)]
+      (if-not (success? status expected-status)
+        (throw (error/info :http/failure
+                           {:message "EHR HTTP communication failed"
+                            :scope :ehr-adapter.middleware.bb-http-client
+                            :operation :http-request
+                            :status status
+                            :error-body body
+                            :expected-status (cond-> [:standard-2xx]
+                                               expected-status
+                                               (into expected-status))}))
+        (<-bb-response response)))))
 
