@@ -57,7 +57,8 @@
    [:body {:optional true} :any]
    [:form-params {:optional true} [:map-of :any :any]]
    [:query-params {:optional true} [:map-of :any :any]]
-   [:timeout-ms {:optional true} :int]
+   [:connect-timeout-ms {:optional true} [:int {:min 1}]]
+   [:read-timeout-ms {:optional true} [:int {:min 1}]]
    [:content-type {:optional true} [:or :keyword MimeCodeMap]]
    [:accept {:optional true} [:or :keyword MimeCodeMap]]
    [:async {:optional true} :boolean]
@@ -158,17 +159,17 @@
       (= (nil? retries) (nil? retry-delay-ms)))]
 
    [:map
-    [:timeout-ms {:optional true} [:int {:min 1}]]
     [:retries {:optional true} [:int {:min 1}]]
     [:retry-delay-ms {:optional true} [:int {:min 1}]]
     [:retry-on {:optional true} [:vector {:error/message "retry-on must be a vector of valid HTTP status codes (100-599)"}
                                  [:int {:min 100 :max 599}]]]
     [:retry-strategy {:optional true} [:enum {:error/message "retry-strategy must be either :linear or :exponential"}
                                        :linear :exponential]]
+    [:before-retry {:optional true} [:fn {:error/message "on-retry must be a Clojure function"} fn?]]
     [:refresh-token-on {:optional true}
      [:vector {:error/message "refresh-token-on must be a vector of valid HTTP status codes (100-599)"}
       [:int {:min 100 :max 599}]]]
-    [:client-builder {:optional true} [:fn {:error/message "client-builder must be a Clojure function"} fn?]]
+    [:client {:optional true} :any]
     [:request-handler [:fn {:error/message "request-handler must be a Clojure function"} fn?]]]])
 
 (def Operation
@@ -187,7 +188,7 @@
    [:domain :qualified-keyword]
    [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
-   [:auth
+   [:auth {:optional true}
     [:vector Authentication]]
    [:network-config NetworkConfiguration]
    [:operations {:optional true}
@@ -209,7 +210,7 @@
   [:map {:closed true}
    [:domain :qualified-keyword]
    [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
-   [:auth RunTimeAuth]
+   [:auth {:optional true} RunTimeAuth]
    [:operations {:optional true} [:map-of :keyword [:fn {:error/message "each operation must be a compiled Clojure function"} fn?]]]])
 
 ;; =================================================================

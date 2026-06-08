@@ -6,9 +6,6 @@
 (defn- mock-http-request-handler [_req]
   {:status 200 :body "OK"})
 
-(defn- mock-client-builder [_config]
-  {:client-instance :mocked-connection-pool})
-
 (defn- mock-translation-middleware [handler]
   (fn [req]
     (let [coerced-req (assoc req :coerced? true)
@@ -22,13 +19,14 @@
   "mock-bearer-token-123")
 
 (defn- build-mock-instance [config]
-  {:domain    (:domain config)
-   :base-url  (:base-url config)
-   :auth      {:state     (atom {:token "xyz"})
-               :get-token mock-get-token-fn
-               :config    (:auth config)}
-   :operations (into {} (map (fn [op] [(:name op) (fn [data] {:status 200 :executed (:name op) :data data})])
-                             (:operations config)))})
+  (cond-> {:domain     (:domain config)
+           :base-url   (:base-url config)
+           :operations (into {} (map (fn [op] [(:name op) (fn [data] {:status 200 :executed (:name op) :data data})])
+                                     (:operations config)))}
+    ;; Solo inyectamos el sub-mapa compilado de :auth si la configuración original lo proveía
+    (:auth config) (assoc :auth {:state     (atom {:token "xyz"})
+                                 :get-token mock-get-token-fn
+                                 :config    (:auth config)})))
 
 ;; =============================================================================
 ;; Valid Configurations Tests
@@ -45,16 +43,15 @@
                           :password "secret-pass-123"}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
-  (testing "2. Multitenant adapter with standard OAuth2 credentials pipeline, full network-config and dynamic operations"
+  (testing "2. Multitenant adapter with standard OAuth2 credentials pipeline, full resilient network-config and dynamic operations"
     (let [config {:domain :eclinicalworks/tenant-beta
                   :base-url "https://api.eclinicalworks.com/v2"
-                  :network-config {:timeout-ms 5000
-                                   :retries 3
+                  :network-config {:retries 3
                                    :retry-delay-ms 200
                                    :retry-strategy :exponential
                                    :retry-on [500 502 503 504]
                                    :refresh-token-on [401]
-                                   :client-builder mock-client-builder
+                                   :client :mock-babashka-http-client
                                    :request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth [{:type          :oauth2
@@ -123,7 +120,7 @@
                                                     :form-params {"alg" "RS256"
                                                                   :custom-id 12345}
                                                     :headers {"X-Partner-Id" "partner-99"
-                                                              :X-Context-Id  "ctx-abc"}
+                                                              "X-Context-Id"  "ctx-abc"}
                                                     :query-params {:sandbox true}}}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
@@ -175,6 +172,14 @@
                                         :d "G4n7X..."
                                         :p "9_3A1..."
                                         :q "8_mP4..."}}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "10. No authentication configuration (Delegated entirely to a pre-configured HTTP client/mTLS)"
+    (let [config {:domain :hapi-fhir/public-sandbox
+                  :base-url "https://hapi.fhir.org/baseR4"
+                  :middlewares [mock-translation-middleware]
+                  :network-config {:client :my-pre-authorized-java-http-client
+                                   :request-handler mock-http-request-handler}}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -218,7 +223,7 @@
     (testing "Fails if :request-handler inside :network-config is missing"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com"
-                    :network-config {:timeout-ms 2000}
+                    :network-config {:retries 3 :retry-delay-ms 100}
                     :middlewares [mock-translation-middleware]
                     :auth [{:type :basic-auth :username "u" :password "p"}]}]
         (is (thrown-with-msg?
@@ -234,7 +239,6 @@
           :middlewares [mock-translation-middleware]
           :auth [{:type :basic-auth :username "u" :password "p"}]
           :network-config {:request-handler mock-http-request-handler
-                           :timeout-ms 1000
                            :retries 3
                            :retry-strategy :linear}})
         (is false "Expected ExceptionInfo to be thrown")
@@ -396,7 +400,7 @@
 ;; =============================================================================
 
 (deftest validate-adapter-instance-test
-  (testing "1. Valid instance generated"
+  (testing "1. Valid instance generated with authentication"
     (let [config {:domain :eclinicalworks/tenant-alpha
                   :base-url "https://fhir.ecw.com/v1/fhir"
                   :auth [{:type :basic-auth :username "u" :password "p"}]
@@ -404,7 +408,14 @@
           instance (build-mock-instance config)]
       (is (= instance (schema/validate-adapter-instance instance)))))
 
-  (testing "2. Error: Fails if :auth :state is not a real IAtom"
+  (testing "2. Valid instance generated without authentication (No :auth block)"
+    (let [config {:domain :hapi-fhir/public-sandbox
+                  :base-url "https://hapi.fhir.org/baseR4"
+                  :operations [{:name :read-observation :path ["v1" :id] :method :get}]}
+          instance (build-mock-instance config)]
+      (is (= instance (schema/validate-adapter-instance instance)))))
+
+  (testing "3. Error: Fails if :auth :state is not a real IAtom"
     (let [instance {:domain    :eclinicalworks/tenant-fail
                     :base-url  "https://fhir.ecw.com/v1/fhir"
                     :auth      {:state     {:not-an-atom true}
@@ -419,7 +430,7 @@
             (is (some #(str/includes? % "auth state must be a Clojure Atom (IAtom)")
                       (get-in errors [:auth :state]))))))))
 
-  (testing "3. Error: Fails if an operation member is not an executable function"
+  (testing "4. Error: Fails if an operation member is not an executable function"
     (let [instance {:domain    :eclinicalworks/tenant-fail
                     :base-url  "https://fhir.ecw.com/v1/fhir"
                     :auth      {:state     (atom {})
@@ -453,7 +464,7 @@
                :content-type {:code :json :properties {"charset" "utf-8"}}
                :accept       {:code :json}
                :query-params {"page" 1 "limit" 10}
-               :timeout-ms 5000
+               :connect-timeout-ms 5000
                :async false
                :throw-exceptions false}]
       (is (= req (schema/validate-http-request req)))))
