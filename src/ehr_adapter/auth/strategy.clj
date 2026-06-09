@@ -24,14 +24,14 @@
 
   It does not normalize or transform response formats; varying structures and 
   dynamic data extraction must be handled upstream using context bindings."
-  (fn [layer _http-client] (:type layer)))
+  (fn [layer _request-handler] (:type layer)))
 
 ;; BasicAuth Strategy
 (defn basic-auth
   "Executes the Basic Authentication strategy.
   Returns a map with the Base64 token if no active request is specified in options, 
   otherwise injects the Authorization header into options and executes the request."
-  [{:keys [username password options]} http-client]
+  [{:keys [username password options]} request-handler]
   (let [req-opts (:request options)
         token (->base64 (format "%s:%s" username password))
         auth-data {:token token
@@ -41,29 +41,29 @@
       auth-data
       (-> req-opts
           (update :headers merge auth-header)
-          http-client))))
+          request-handler))))
 
 (defmethod execute :basic-auth
-  [layer http-client]
-  (basic-auth layer http-client))
+  [layer request-handler]
+  (basic-auth layer request-handler))
 
 ;; CustomAuth Strategy
 (defn custom-auth
   "Executes a user-defined custom authentication strategy.
   Invokes the provided handler function passing the options map and the http-client."
-  [{:keys [handler options]} http-client]
-  (handler options http-client))
+  [{:keys [handler options]} request-handler]
+  (handler options request-handler))
 
 (defmethod execute :custom
-  [layer http-client]
-  (custom-auth layer http-client))
+  [layer request-handler]
+  (custom-auth layer request-handler))
 
 ;; OAuth2 Strategy
 (defn oauth2
   "Executes the OAuth2 client credentials strategy.
   Builds a POST request using strictly URL-encoded form parameters as per RFC 6749,
   merging optional headers or extra form parameters from options."
-  [{:keys [token-url grant-type client-id client-secret scopes options]} http-client]
+  [{:keys [token-url grant-type client-id client-secret scopes options]} request-handler]
   (let [req-opts (:request options)
         new-form-params (:form-params req-opts)
         scope (format-scopes scopes)
@@ -80,16 +80,16 @@
                   :content-type :form-url-encoded}
 
         request (merge req-opts base-req)]
-    (http-client request)))
+    (request-handler request)))
 
 (defmethod execute :oauth2
-  [layer http-client]
-  (oauth2 layer http-client))
+  [layer request-handler]
+  (oauth2 layer request-handler))
 
 ;; Smart On FHIR Strategy
 (defn smart-on-fhir-backend-services
   "Executes the SMART on FHIR Backend Services authorization flow (asymmetric OAuth2 / RFC 7523)."
-  [{:keys [scopes token-url options] :as layer} http-client]
+  [{:keys [scopes token-url options] :as layer} request-handler]
   (let [req-opts (:request options)
         new-form-params (:form-params req-opts)
         client-assertion (sign/client-assertion layer)
@@ -105,8 +105,8 @@
                                  (merge new-form-params))
                   :content-type :form-url-encoded}
         request (merge req-opts base-req)]
-    (http-client request)))
+    (request-handler request)))
 
 (defmethod execute :smart-on-fhir/backend-services
-  [layer http-client]
-  (smart-on-fhir-backend-services layer http-client))
+  [layer request-handler]
+  (smart-on-fhir-backend-services layer request-handler))

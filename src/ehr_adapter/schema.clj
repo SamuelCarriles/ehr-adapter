@@ -26,7 +26,7 @@
 
 (defn path-segment?
   [segment]
-  (or (ref/reference? segment)
+  (or (ref/required-reference? segment)
       (and
        (not-blank-str? segment)
        (not (or (str/ends-with? segment "/")

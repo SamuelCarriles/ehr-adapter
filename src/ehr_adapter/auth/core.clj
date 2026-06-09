@@ -57,9 +57,9 @@
   becomes the input context for the next one.
 
   Returns the final, fully transformed context map."
-  [initial-context auth-layers http-client]
+  [initial-context auth-layers request-handler]
   (reduce
    (fn [context layer]
-     (process-layer context layer http-client))
+     (process-layer context layer request-handler))
    initial-context
    auth-layers))

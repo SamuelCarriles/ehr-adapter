@@ -3,7 +3,7 @@
   (:require [clojure.walk :refer [postwalk]]
             [ehr-adapter.error :as error]))
 
-(defn reference?
+(defn  required-reference?
   "Returns true if x is a keyword with the namespace 'ref' 
   (e.g., :ref/patientId). Otherwise, returns false."
   [x]
@@ -11,9 +11,29 @@
        (= "ref" (namespace x))))
 
 (defn optional-reference?
+  "Returns true if x is a keyword with the namespace 'ref?' 
+  (e.g., :ref/patientId). Otherwise, returns false."
   [x]
   (and (keyword? x)
        (= "ref?" (namespace x))))
+
+(defn reference?
+
+  [x]
+  (or (required-reference? x)
+      (optional-reference? x)))
+
+(defn referent
+  "Returns the underlying target keyword (the referent) of a given reference 
+   by stripping away its 'ref' or 'ref?' namespace.
+   
+   Example:
+     (referent :ref/patientId)  ;; => :patientId
+     (referent :ref?/patientId) ;; => :patientId
+     (referent :plain-keyword)  ;; => nil"
+  [ref]
+  (when (reference? ref)
+    (keyword (name ref))))
 
 (defn resolve
   "Recursively traverses the given `form` (maps, vectors, lists, etc.) 
@@ -45,7 +65,7 @@
 
        (cond
 
-         (reference? v)
+         (required-reference? v)
          (if-some [resolved-ref (get-ref v)]
            resolved-ref
            (throw (error/info :invalid/reference
@@ -77,7 +97,7 @@
   (let [refs (atom #{})]
     (postwalk
      (fn [v]
-       (when (or (reference? v) (optional-reference? v))
+       (when (or (required-reference? v) (optional-reference? v))
          (swap! refs conj v))
        v)
      x)

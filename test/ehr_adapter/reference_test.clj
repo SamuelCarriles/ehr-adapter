@@ -4,18 +4,18 @@
 
 (deftest reference?-test
   (testing "Identifies valid :ref/... keywords"
-    (is (true? (ref/reference? :ref/patientId)))
-    (is (true? (ref/reference? :ref/encounter-id))))
+    (is (true? (ref/required-reference? :ref/patientId)))
+    (is (true? (ref/required-reference? :ref/encounter-id))))
 
   (testing "Rejects keywords from other namespaces or without namespace"
-    (is (false? (ref/reference? :patient/id)))
-    (is (false? (ref/reference? :id)))
-    (is (false? (ref/reference? :ref))))
+    (is (false? (ref/required-reference? :patient/id)))
+    (is (false? (ref/required-reference? :id)))
+    (is (false? (ref/required-reference? :ref))))
 
   (testing "Rejects non-keyword types"
-    (is (false? (ref/reference? "ref/patientId")))
-    (is (false? (ref/reference? 123)))
-    (is (false? (ref/reference? nil)))))
+    (is (false? (ref/required-reference? "ref/patientId")))
+    (is (false? (ref/required-reference? 123)))
+    (is (false? (ref/required-reference? nil)))))
 
 (deftest resolve-test
   (testing "Successful resolution of references"
@@ -44,7 +44,7 @@
           template {:path ["v1" "Patient" :ref/missingId]}]
 
       (try
-        (ref/reference? (ref/resolve bindings template))
+        (ref/required-reference? (ref/resolve bindings template))
         (is false "Expected ExceptionInfo to be thrown due to missing binding")
         (catch clojure.lang.ExceptionInfo ex
           (let [ex-msg  (.getMessage ex)
