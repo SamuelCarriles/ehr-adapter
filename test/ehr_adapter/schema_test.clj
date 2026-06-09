@@ -313,7 +313,7 @@
       (catch clojure.lang.ExceptionInfo ex
         (let [errors (:details (ex-data ex))
               path-errors (get-in errors [:operations 0 :path])]
-          (is (str/includes? (str path-errors) "each segment in operation-path must be a keyword or a non-blank string"))))))
+          (is (str/includes? (str path-errors) "each segment in operation-path must be a valid reference (:ref/...) or a non-blank string"))))))
 
   (testing "URL Validation: Reject trailing slashes in base-url and auth properties"
     (testing "Fails if base-url contains a trailing slash"
@@ -363,7 +363,7 @@
         (catch clojure.lang.ExceptionInfo ex
           (let [errors (:details (ex-data ex))
                 path-errors (get-in errors [:operations 0 :path])]
-            (is (some #(clojure.string/includes? % "each segment in operation-path must be a keyword or a non-blank string, and can not start or end with")
+            (is (some #(clojure.string/includes? % "each segment in operation-path must be a valid reference (:ref/...) or a non-blank string, and can not start or end with")
                       path-errors)))))))
 
   (testing "Independent :normalize layer validation failures"

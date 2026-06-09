@@ -1,7 +1,7 @@
 (ns ehr-adapter.reference
+  (:refer-clojure :exclude [resolve])
   (:require [clojure.walk :refer [postwalk]]
-            [ehr-adapter.error :as error]
-            [clojure.core :exclude [resolve]]))
+            [ehr-adapter.error :as error]))
 
 (defn reference?
   "Returns true if x is a keyword with the namespace 'ref' 
@@ -9,6 +9,11 @@
   [x]
   (and (keyword? x)
        (= "ref" (namespace x))))
+
+(defn optional-reference?
+  [x]
+  (and (keyword? x)
+       (= "ref?" (namespace x))))
 
 (defn resolve
   "Recursively traverses the given `form` (maps, vectors, lists, etc.) 
@@ -27,21 +32,54 @@
     cannot be resolved within the provided `ref-bindings` map. The exception 
     includes the full original context for deep production debugging."
 
-  [ref-bindings form]
+  [ref-bindings x]
+  (when (not (map? ref-bindings))
+    (throw (error/info :invalid/type
+                       {:message "ref-bindings must be a map"
+                        :scope :ehr-adapter.reference
+                        :operation :resolve-reference
+                        :expected [:map]})))
   (postwalk
-   (fn [x]
-     (if (and (reference? x) (map? ref-bindings))
-       (let [k (keyword (name x))]
-         (if (contains? ref-bindings k)
-           (get ref-bindings k)
+   (fn [v]
+     (letfn [(get-ref [r] (->> r name keyword (get ref-bindings)))]
+
+       (cond
+
+         (reference? v)
+         (if-some [resolved-ref (get-ref v)]
+           resolved-ref
            (throw (error/info :invalid/reference
-                              {:message (format "The reference %s can't be resolved" x)
+                              {:message (format "The reference %s can't be resolved" v)
                                :scope :ehr-adapter.reference
                                :operation :resolve-reference
-                               :reference x
-                               :context form
-                               :ref-bindings ref-bindings}))))
-       x))
-   form))
+                               :reference v
+                               :context x
+                               :ref-bindings ref-bindings})))
+         ;;
+         (optional-reference? v)
+         (get-ref v)
+         ;;
+         :else
+         v)))
+   x))
 
+(defn extract
+  "Recursively traverses the given data structure `x` and collects all unique 
+   reference keywords (e.g., :ref/variable or :ref?/variable).
+
+   Returns a set containing all the encountered reference keywords intact, 
+   preserving their original namespaces so they can be classified later.
+
+   Example:
+     (extract {:path [:room :ref/id] :request {:name :ref?/name}})
+     ;; => #{:ref/id :ref?/name}"
+  [x]
+  (let [refs (atom #{})]
+    (postwalk
+     (fn [v]
+       (when (or (reference? v) (optional-reference? v))
+         (swap! refs conj v))
+       v)
+     x)
+    @refs))
 

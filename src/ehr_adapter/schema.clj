@@ -4,7 +4,8 @@
             [malli.util :as mu]
             [clojure.string :as str]
             [buddy.sign.jws :as jws]
-            [ehr-adapter.error :as error])
+            [ehr-adapter.error :as error]
+            [ehr-adapter.reference :as ref])
   (:import [org.apache.commons.validator.routines UrlValidator]))
 
 (defn absolute-url?
@@ -25,7 +26,7 @@
 
 (defn path-segment?
   [segment]
-  (or (keyword? segment)
+  (or (ref/reference? segment)
       (and
        (not-blank-str? segment)
        (not (or (str/ends-with? segment "/")
@@ -71,6 +72,11 @@
        [:fn {:error/message "if :method exists, :url must exist, and vice versa"}
         (fn [{:keys [method url]}]
           (= (nil? method) (nil? url)))])))
+
+(def HttpRequestOperation
+  (-> HttpRequest
+      (mu/dissoc :method)
+      (mu/dissoc :url)))
 
 ;; =================================================================
 ;; JWK 
@@ -177,10 +183,10 @@
    [:name :keyword]
    [:path
     [:vector
-     [:fn {:error/message "each segment in operation-path must be a keyword or a non-blank string, and can not start or end with \"/\""} path-segment?]]]
+     [:fn {:error/message "each segment in operation-path must be a valid reference (:ref/...) or a non-blank string, and can not start or end with \"/\""} path-segment?]]]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:expected-status {:optional true} [:vector [:int {:min 100 :max 599}]]]
-   [:base-headers {:optional true} [:map-of :string [:or :keyword :string :int]]]
+   [:request {:optional true} HttpRequestOperation]
    [:description {:optional true} [:fn {:error/message "operation-description must be a non-blank string"} not-blank-str?]]])
 
 (def AdapterConfiguration
