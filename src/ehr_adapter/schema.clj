@@ -181,9 +181,10 @@
 (def Operation
   [:map
    [:name :keyword]
-   [:path
-    [:vector
-     [:fn {:error/message "each segment in operation-path must be a valid reference (:ref/...) or a non-blank string, and can not start or end with \"/\""} path-segment?]]]
+   [:path [:or
+           [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]
+           [:vector
+            [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]]]]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:expected-status {:optional true} [:vector [:int {:min 100 :max 599}]]]
    [:request {:optional true} HttpRequestOperation]
@@ -254,3 +255,4 @@
 (defn validate-private-jwk
   [jwk-map]
   (validate-schema PrivateJWK jwk-map "Invalid private JWK"))
+

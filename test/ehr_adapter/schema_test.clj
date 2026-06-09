@@ -180,6 +180,18 @@
                   :middlewares [mock-translation-middleware]
                   :network-config {:client :my-pre-authorized-java-http-client
                                    :request-handler mock-http-request-handler}}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "11. Operations using plain static string paths without dynamic vector segments"
+    (let [config {:domain :advancedmd/static-path-tenant
+                  :base-url "https://api.advancedmd.com/v2"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth [{:type :basic-auth :username "u" :password "p"}]
+                  :operations [{:name :get-api-status
+                                :method :get
+                                :path "v2/status/health"
+                                :description "Retrieves the current static operational status of the upstream EHR service."}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -313,7 +325,24 @@
       (catch clojure.lang.ExceptionInfo ex
         (let [errors (:details (ex-data ex))
               path-errors (get-in errors [:operations 0 :path])]
-          (is (str/includes? (str path-errors) "each segment in operation-path must be a valid reference (:ref/...) or a non-blank string"))))))
+          (is (str/includes? (str path-errors) "operation-path must be a non-blank string or a vector of valid segments"))))))
+
+  (testing "Operation configuration contains an invalid static string path (starts or ends with slash)"
+    (try
+      (schema/validate-adapter-config
+       {:domain :eclinicalworks/test-tenant
+        :base-url "https://api.com"
+        :network-config {:request-handler mock-http-request-handler}
+        :middlewares [mock-translation-middleware]
+        :auth [{:type :basic-auth :username "u" :password "p"}]
+        :operations [{:name :get-invalid-static-path
+                      :method :get
+                      :path "/v1/Patient/"}]})
+      (is false "Expected ExceptionInfo due to invalid static string path slashes")
+      (catch clojure.lang.ExceptionInfo ex
+        (let [errors (:details (ex-data ex))
+              path-errors (get-in errors [:operations 0 :path])]
+          (is (str/includes? (str path-errors) "operation-path must be a non-blank string or a vector of valid segments"))))))
 
   (testing "URL Validation: Reject trailing slashes in base-url and auth properties"
     (testing "Fails if base-url contains a trailing slash"
@@ -363,7 +392,7 @@
         (catch clojure.lang.ExceptionInfo ex
           (let [errors (:details (ex-data ex))
                 path-errors (get-in errors [:operations 0 :path])]
-            (is (some #(clojure.string/includes? % "each segment in operation-path must be a valid reference (:ref/...) or a non-blank string, and can not start or end with")
+            (is (some #(clojure.string/includes? % "operation-path must be a non-blank string or a vector of valid segments")
                       path-errors)))))))
 
   (testing "Independent :normalize layer validation failures"
