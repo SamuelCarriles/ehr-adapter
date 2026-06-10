@@ -72,7 +72,6 @@
 
         (is (= "https://api.ehr.com/v1/Patient/123/History" (:url result)))
         (is (= :get (:method result)))
-        (is (= #{200} (:expected-status result)))
 
         (is (= "Bearer TOKEN" (get-in result [:headers "Authorization"])))
         (is (= "overridden-value" (get-in result [:headers "X-Static-Header"])))

@@ -77,7 +77,7 @@
    optional referent keys needed for execution.
    
    The compiled function expects a runtime context map and a request handler."
-  [{:keys [path method expected-status request description] :as op}]
+  [{:keys [path method request description] :as op}]
   (letfn [(operation [ctx req-handler]
             (let [full-url (full-url ctx path)
 
@@ -86,9 +86,6 @@
                   req (cond-> {:url full-url :method method}
                         request
                         (merge request)
-
-                        expected-status
-                        (assoc :expected-status expected-status)
 
                         new-req
                         (deep-merge new-req))]

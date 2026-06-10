@@ -58,12 +58,9 @@
    [:body {:optional true} :any]
    [:form-params {:optional true} [:map-of :any :any]]
    [:query-params {:optional true} [:map-of :any :any]]
-   [:connect-timeout-ms {:optional true} [:int {:min 1}]]
-   [:read-timeout-ms {:optional true} [:int {:min 1}]]
+   [:timeout-ms {:optional true} [:int {:min 1}]]
    [:content-type {:optional true} [:or :keyword MimeCodeMap]]
-   [:accept {:optional true} [:or :keyword MimeCodeMap]]
-   [:async {:optional true} :boolean]
-   [:throw-exceptions {:optional true} :boolean]])
+   [:accept {:optional true} [:or :keyword MimeCodeMap]]])
 
 (def HttpRequestOption
   (-> HttpRequest
@@ -186,7 +183,6 @@
            [:vector
             [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]]]]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
-   [:expected-status {:optional true} [:vector [:int {:min 100 :max 599}]]]
    [:request {:optional true} HttpRequestOperation]
    [:description {:optional true} [:fn {:error/message "operation-description must be a non-blank string"} not-blank-str?]]])
 
@@ -196,7 +192,9 @@
    [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
    [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
    [:auth {:optional true}
-    [:vector Authentication]]
+    [:map
+     [:initial [:vector Authentication]]
+     [:refresh {:optional true} [:vector Authentication]]]]
    [:network-config NetworkConfiguration]
    [:operations {:optional true}
     [:vector Operation]]])
@@ -211,7 +209,9 @@
 
    [:get-token [:fn {:error/message "get-token must be a compiled Clojure function"} fn?]]
 
-   [:config [:vector Authentication]]])
+   [:config [:map
+             [:initial [:vector Authentication]]
+             [:refresh {:optional true} [:vector Authentication]]]]])
 
 (def AdapterInstance
   [:map {:closed true}

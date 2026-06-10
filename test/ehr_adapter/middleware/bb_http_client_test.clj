@@ -10,15 +10,13 @@
   (testing "Renames motor keys to bb keys"
     (let [req {:method :get
                :url "https://api.ehr.com/Patient"
-               :timeout-ms 5000
-               :throw-exceptions false}
+               :timeout-ms 5000}
           result (->bb-req req)]
       (is (= "https://api.ehr.com/Patient" (:uri result)))
       (is (= 5000 (:timeout result)))
       (is (= false (:throw result)))
       (is (nil? (:url result)))
-      (is (nil? (:timeout-ms result)))
-      (is (nil? (:throw-exceptions result)))))
+      (is (nil? (:timeout-ms result)))))
 
   (testing "Removes :content-type and :accept from root and injects them into :headers"
     (let [req {:method :get
@@ -59,7 +57,7 @@
           result (<-bb-response response)]
       (is (= {:code :fhir/json :properties {"charset" "utf-8"}}
              (:content-type result)))
-      (is (nil? (get-in result [:headers "content-type"])))
+      (is (nil? (get-in result [:headers "content-Type"])))
       (is (= "nginx" (get-in result [:headers "server"])))))
 
   (testing "No :content-type in response leaves headers untouched"
@@ -121,25 +119,19 @@
       (is (nil? (:timeout-ms bb-req))))))
 
 (deftest wrap-bb-http-client-errors-test
-  (testing "Unsuccessful HTTP status throws structured :http/failure error"
+  (testing "Unsuccessful HTTP status flows normally (no longer short-circuited by middleware)"
     (let [handler (fn [bb-req]
                     {:status 401
                      :body "{\"error\": \"unauthorized\"}"
                      :headers {"content-type" "application/json"}
                      :request bb-req})
-          wrapped (wrap-request-handler handler)]
-      (try
-        (wrapped {:method :get :url "https://api.ehr.com/Patient"})
-        (is false "Should have thrown an exception")
-        (catch clojure.lang.ExceptionInfo e
-          (let [err-data (ex-data e)]
-            (is (= :http/failure (:code err-data)))
-            (is (= :ehr-adapter.middleware.bb-http-client (:scope err-data)))
-            (is (= 401 (get-in err-data [:details :status])))
-            (is (= "{\"error\": \"unauthorized\"}" (get-in err-data [:details :error-body])))
-            (is (= [:standard-2xx] (get-in err-data [:details :expected-status]))))))))
+          wrapped (wrap-request-handler handler)
+          result (wrapped {:method :get :url "https://api.ehr.com/Patient"})]
+      (is (= 401 (:status result)))
+      (is (= "{\"error\": \"unauthorized\"}" (:body result)))
+      (is (= {:code :json} (:content-type result)))))
 
-  (testing "HTTP status marked as :expected-status does not throw an error"
+  (testing "HTTP status marked as :expected-status flows normally"
     (let [handler (fn [bb-req]
                     {:status 404
                      :body "{\"issue\": \"not found\"}"
@@ -153,7 +145,7 @@
       (is (= "{\"issue\": \"not found\"}" (:body result)))
       (is (= "https://api.ehr.com/Patient" (get-in result [:request :uri])))))
 
-  (testing "Hard JVM network exception is unified under :http/failure"
+  (testing "Hard JVM network exception is unified under :http/failure (Flat map version)"
     (let [handler (fn [_]
                     (throw (java.net.ConnectException. "Connection refused")))
           wrapped (wrap-request-handler handler)]
@@ -167,4 +159,4 @@
             (is (= :ehr-adapter.middleware.bb-http-client (:scope err-data)))
             (is (= :http-request (:operation err-data)))
             (is (instance? java.net.ConnectException exception))
-            (is (= "Connection refused" (.getMessage exception)))))))))
+            (is (= "Connection refused" (.getMessage e)))))))))

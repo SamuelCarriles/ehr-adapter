@@ -2,7 +2,8 @@
   (:require
    [buddy.core.keys :as bk]
    [buddy.sign.jwt :as jwt]
-   [ehr-adapter.error :as error]))
+   [ehr-adapter.error :as error]
+   [ehr-adapter.time :refer [now]]))
 
 (defn- coerce-private-key
   "Coerces a private key configuration into a java.security.PrivateKey instance.
@@ -31,11 +32,6 @@
                           :scope :ehr-adapter.auth.sign
                           :operation :resolve-private-key
                           :private-key pk})))))
-
-(defn now
-  "Returns the current Unix timestamp in seconds."
-  []
-  (quot (System/currentTimeMillis) 1000))
 
 (defmulti client-assertion (fn [auth-strategy] (:type auth-strategy)))
 

@@ -1,5 +1,6 @@
 (ns ehr-adapter.http.network-config
-  (:require [clojure.tools.logging :as log]))
+  (:require [clojure.tools.logging :as log]
+            [ehr-adapter.auth.core :refer [token-expired?]]))
 
 (defn needs-retry?
   [response retry-on attempt max-retries]
@@ -22,7 +23,7 @@
       (* base-delay-ms factor))
 
     base-delay-ms))
-
+;; TODO: Incluir expected-status en el tema de los reintentos
 (defn with-retries
   "Wraps a handler with a synchronous retry policy."
   [handler {:keys [retries retry-on retry-delay-ms before-retry retry-strategy]}]
@@ -57,3 +58,11 @@
             (if (instance? Throwable response)
               (throw response)
               response)))))))
+
+#_(defn with-refresh
+    [handler {:keys [refresh-token-on]}]
+    (fn [req]
+      (if (nil? refresh-token-on)
+        (handler req)
+
+        (cond))))

@@ -47,11 +47,11 @@ This is how explicit, robust, and readable an adapter configuration looks using 
 
    :middlewares [ehr-adapter.middleware.bb-http-client/wrap-request-handler]
 
-   :auth [{:type          :oauth2
-           :token-url     "https://auth.interop-ehr.com/v2/oauth2/token"
-           :grant-type    "client_credentials"
-           :client-id      "prod-client-id-xyz"
-           :client-secret "super-secure-secret"}]
+   :auth {:initial [{:type          :oauth2
+                     :token-url     "https://auth.interop-ehr.com/v2/oauth2/token"
+                     :grant-type    "client_credentials"
+                     :client-id      "prod-client-id-xyz"
+                     :client-secret "super-secure-secret"}]}
 
    ;; Operations that will be compiled into executable functions
    :operations [{:name :search-patient

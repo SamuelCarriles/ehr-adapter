@@ -1,6 +1,7 @@
 (ns ehr-adapter.auth.core
   (:require [ehr-adapter.auth.strategy :as strategy]
-            [ehr-adapter.reference :refer [resolve]]))
+            [ehr-adapter.reference :refer [resolve]]
+            [ehr-adapter.time :refer [now]]))
 
 (defn bindings
   "Resolves a map of dynamic paths against the given context map.
@@ -35,7 +36,13 @@
 
 (defn normalize
   [context layer]
-  (select-keys (full-context context (dissoc layer :type)) [:token :token-type :refresh-token :expires-in]))
+  (let [ctx (full-context context (dissoc layer :type))
+        token-data (select-keys ctx [:token :token-type :refresh-token])
+
+        expires-in (some-> ctx :expires-in str parse-long)]
+    (cond-> token-data
+      expires-in
+      (assoc :expires-at (+ (now) expires-in)))))
 
 (defn process-layer
   "Prepares the authentication layer by resolving its dynamic bindings 
@@ -63,3 +70,13 @@
      (process-layer context layer request-handler))
    initial-context
    auth-layers))
+
+(defn token-expired?
+  [{:keys [expires-at]}]
+  (and (some? expires-at)
+       (>= (now) expires-at)))
+
+(defn refresh
+  [auth-layers request-handler]
+  (fn [ctx]
+    (run ctx auth-layers request-handler)))

@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [ehr-adapter.auth.core :as core]
             [ehr-adapter.schema :as schema]
+            [ehr-adapter.time :as time]
             [ehr-adapter.auth.strategy :as strategy]))
 
 ;; =============================================================================
@@ -43,8 +44,9 @@
           layer {:type :normalize
                  :token [:body :access_token]
                  :expires-in [:body :expires_in]}]
-      (is (= {:token "token" :expires-in 3600}
-             (core/normalize network-response layer)))))
+      (with-redefs [time/now (constantly 1000)]
+        (is (= {:token "token" :expires-at 4600}
+               (core/normalize network-response layer))))))
 
   (testing "Fallback behavior: keeps values that are already clean in the root context"
     (let [clean-response {:token "already-clean-token"
