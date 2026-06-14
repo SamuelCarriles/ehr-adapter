@@ -75,6 +75,12 @@
       (mu/dissoc :method)
       (mu/dissoc :url)))
 
+(def HttpResponse
+  [:map
+   [:status :int]
+   [:headers {:optional true} [:map-of :string :any]]
+   [:body {:optional true}]])
+
 ;; =================================================================
 ;; JWK 
 (def PublicJWK

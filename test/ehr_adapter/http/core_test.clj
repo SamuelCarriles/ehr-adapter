@@ -4,19 +4,16 @@
 
 (deftest success?-test
   (testing "Standard HTTP 2xx success range"
-    (is (true? (http/success? 200)))
-    (is (true? (http/success? 201)))
-    (is (true? (http/success? 299)))
-    (is (false? (http/success? 302)))
-    (is (false? (http/success? 400)))
-    (is (false? (http/success? 500))))
+    (is (true? (http/success? {:status 200})))
+    (is (true? (http/success? {:status 201})))
+    (is (true? (http/success? {:status 299})))
+    (is (false? (http/success? {:status 302})))
+    (is (false? (http/success? {:status 400})))
+    (is (false? (http/success? {:status 500}))))
 
-  (testing "Custom expected status overrides"
-    (is (true? (http/success? 404 [200 404])))
-    (is (true? (http/success? 302 [302 307])))
-    (is (false? (http/success? 500 [200 404]))))
-
-  (testing "Defensive behavior against nil or empty expected-status"
-    (is (true? (http/success? 200 nil)))
-    (is (false? (http/success? 401 nil)))
-    (is (false? (http/success? 401 [])))))
+  (testing "Defensive behavior against invalid or missing values"
+    (is (false? (http/success? nil)))
+    (is (false? (http/success? [])))
+    (is (false? (http/success? "a")))
+    (is (false? (http/success? {:body "No status key"})))
+    (is (false? (http/success? {:status nil})))))

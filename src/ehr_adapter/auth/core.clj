@@ -1,7 +1,9 @@
 (ns ehr-adapter.auth.core
   (:require [ehr-adapter.auth.strategy :as strategy]
             [ehr-adapter.reference :refer [resolve]]
-            [ehr-adapter.time :refer [now]]))
+            [ehr-adapter.time :refer [now]]
+            [ehr-adapter.http.core :as http]
+            [ehr-adapter.error :as error]))
 
 (defn bindings
   "Resolves a map of dynamic paths against the given context map.
@@ -48,13 +50,29 @@
   "Prepares the authentication layer by resolving its dynamic bindings 
   against the context, merging the results, and then dispatches to the 
   corresponding authentication strategy execution."
-  [context layer http-client]
+  [context layer request-handler]
   (let [layer-type (:type layer)
         full-ctx (full-context context (:bindings layer))
         ready-layer (resolve full-ctx (dissoc layer :bindings))]
     (if (= :normalize layer-type)
       (normalize full-ctx ready-layer)
-      (strategy/execute ready-layer http-client))))
+
+      (let [result (strategy/execute ready-layer request-handler)
+            status (:status result)]
+
+        (cond
+
+          (or (not status) (http/success? result))
+          result
+
+          :else
+          (throw (error/info
+                  :http/failure
+                  {:message (format "Authentication request failed for layer %s" layer-type)
+                   :scope :ehr-adapter.auth.core
+                   :operation :authentication
+                   :status status
+                   :error-body (:body result)})))))))
 
 (defn run
   "Sequentially executes a pipeline of authentication layers.

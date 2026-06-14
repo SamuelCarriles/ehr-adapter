@@ -60,12 +60,13 @@
     (let [network-response {:token "token"}
           layer {:type :normalize :extra-unwanted-key "garbage"}]
       (is (= {:token "token"}
-             (core/normalize network-response layer)))))
+             (core/normalize network-response layer))))))
 
 ;; =============================================================================
 ;; 3. PROCESS-LAYER TESTS
 ;; =============================================================================
 
+(deftest process-layer-test
   (testing "When layer is a transport strategy -> dispatches correctly to strategy/execute"
     (let [mock-context {:initial "data"}
           mock-layer   {:type :oauth2
@@ -86,6 +87,53 @@
           (is (not (contains? result :bindings)))
           (is (map? form-params))
           (is (= "data" (get form-params "local"))))))))
+
+(deftest process-layer-response-validation-test
+  (testing "When strategy returns a successful HTTP response (2xx), it passes through"
+    (let [mock-context {}
+          mock-layer {:type :oauth2}
+          mock-response {:status 200 :body {:access_token "token-123" :expires_in 3600}}]
+
+      (with-redefs [strategy/execute (fn [_ _] mock-response)]
+        (is (= mock-response (core/process-layer mock-context mock-layer nil))))))
+
+  (testing "When strategy returns a failed HTTP response (4xx), it throws :http/failure"
+    (let [mock-context {}
+          mock-layer {:type :oauth2}
+          mock-response {:status 401 :body {:error "invalid_client"}}]
+
+      (with-redefs [strategy/execute (fn [_ _] mock-response)]
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Authentication request failed"
+             (core/process-layer mock-context mock-layer nil))))))
+
+  (testing "When strategy returns a failed HTTP response (5xx), it throws :http/failure"
+    (let [mock-context {}
+          mock-layer {:type :smart-on-fhir/backend-services}
+          mock-response {:status 500 :body {:error "server_error"}}]
+
+      (with-redefs [strategy/execute (fn [_ _] mock-response)]
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"Authentication request failed"
+             (core/process-layer mock-context mock-layer nil))))))
+
+  (testing "When strategy returns a token map (no :status), it passes through without validation"
+    (let [mock-context {}
+          mock-layer {:type :basic-auth}
+          token-map {:token "dXNlcjpwYXNz" :token-type "Basic"}]
+
+      (with-redefs [strategy/execute (fn [_ _] token-map)]
+        (is (= token-map (core/process-layer mock-context mock-layer nil))))))
+
+  (testing "When strategy returns nil status, it passes through without validation"
+    (let [mock-context {}
+          mock-layer {:type :custom}
+          result-without-status {:body "some-data"}]
+
+      (with-redefs [strategy/execute (fn [_ _] result-without-status)]
+        (is (= result-without-status (core/process-layer mock-context mock-layer nil)))))))
 
 ;; =============================================================================
 ;; 4. FULL FLOW INTEGRATION TESTS
