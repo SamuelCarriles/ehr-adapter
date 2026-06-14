@@ -49,7 +49,6 @@
                                    :retry-delay-ms 200
                                    :retry-strategy :exponential
                                    :retry-on [500 502 503 504]
-                                   :refresh-token-on [401]
                                    :client :mock-babashka-http-client
                                    :request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]

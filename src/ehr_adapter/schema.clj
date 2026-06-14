@@ -175,9 +175,6 @@
     [:retry-strategy {:optional true} [:enum {:error/message "retry-strategy must be either :linear or :exponential"}
                                        :linear :exponential]]
     [:before-retry {:optional true} [:fn {:error/message "on-retry must be a Clojure function"} fn?]]
-    [:refresh-token-on {:optional true}
-     [:vector {:error/message "refresh-token-on must be a vector of valid HTTP status codes (100-599)"}
-      [:int {:min 100 :max 599}]]]
     [:client {:optional true} :any]
     [:request-handler [:fn {:error/message "request-handler must be a Clojure function"} fn?]]]])
 
