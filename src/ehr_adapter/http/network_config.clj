@@ -1,7 +1,7 @@
 (ns ehr-adapter.http.network-config
   (:require [clojure.tools.logging :as log]))
 
-(defn needs-retry?
+(defn- needs-retry?
   [response retry-on attempt max-retries]
   (let [status (:status response)
         retry-on (set retry-on)]
@@ -11,7 +11,7 @@
       (instance? Throwable response)
       (retry-on status)))))
 
-(defn calculate-delay
+(defn- calculate-delay
   [strategy base-delay-ms attempt]
   (case strategy
     :linear (* base-delay-ms attempt)

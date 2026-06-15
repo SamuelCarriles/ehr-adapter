@@ -29,7 +29,18 @@
          content-type (assoc :content-type (h/parse-mime content-type))))))
 
 (defn wrap-request-handler
+  "Middleware that adapts internal engine requests to Babashka HTTP client format and vice versa.
+   
+   It translates the incoming request, executes the wrapped handler, unifies any network 
+   exceptions under the `:http/failure` error code, and transforms the response back 
+   to the engine's expected format.
 
+   Args:
+   - handler : A function that executes a Babashka-compatible HTTP request.
+
+   Returns:
+   A new function that accepts an internal engine request map and returns an internal 
+   engine response map."
   [handler]
   (fn [req]
     (let [bb-req (->bb-req req)

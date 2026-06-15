@@ -35,6 +35,25 @@
   (when (reference? ref)
     (keyword (name ref))))
 
+(defn validate-ref-bindings
+  "Returns true when ref-bindings is a Clojure map, else throws :invalid/type error"
+  [ref-bindings]
+  (if (map? ref-bindings)
+    ref-bindings
+    (throw (error/info :invalid/type
+                       {:message "ref-bindings must be a map"
+                        :scope :ehr-adapter.reference
+                        :operation :resolve-reference
+                        :value ref-bindings
+                        :expected [:map]}))))
+
+(defn get-ref
+  [ref-bindings ref]
+  (->> ref
+       name
+       keyword
+       (get ref-bindings)))
+
 (defn resolve
   "Recursively traverses the given `form` (maps, vectors, lists, etc.) 
   and replaces any placeholder keyword matching the format :ref/variable-name 
@@ -53,34 +72,41 @@
     includes the full original context for deep production debugging."
 
   [ref-bindings x]
-  (when (not (map? ref-bindings))
-    (throw (error/info :invalid/type
-                       {:message "ref-bindings must be a map"
-                        :scope :ehr-adapter.reference
-                        :operation :resolve-reference
-                        :expected [:map]})))
+  (validate-ref-bindings ref-bindings)
   (postwalk
    (fn [v]
-     (letfn [(get-ref [r] (->> r name keyword (get ref-bindings)))]
+     (cond
 
-       (cond
+       (required-reference? v)
+       (if-some [resolved-ref (get-ref ref-bindings v)]
+         resolved-ref
+         (throw (error/info :invalid/reference
+                            {:message (format "The reference %s can't be resolved" v)
+                             :scope :ehr-adapter.reference
+                             :operation :resolve-reference
+                             :reference v
+                             :context x
+                             :ref-bindings ref-bindings})))
+         ;;
+       (optional-reference? v)
+       (get-ref ref-bindings v)
+         ;;
+       :else
+       v))
+   x))
 
-         (required-reference? v)
-         (if-some [resolved-ref (get-ref v)]
-           resolved-ref
-           (throw (error/info :invalid/reference
-                              {:message (format "The reference %s can't be resolved" v)
-                               :scope :ehr-adapter.reference
-                               :operation :resolve-reference
-                               :reference v
-                               :context x
-                               :ref-bindings ref-bindings})))
-         ;;
-         (optional-reference? v)
-         (get-ref v)
-         ;;
-         :else
-         v)))
+(defn partial-resolve
+  [ref-bindings x]
+  (validate-ref-bindings ref-bindings)
+  (postwalk
+   (fn [v]
+     (cond
+       (reference? v)
+       (if-let [resolved-ref (get-ref ref-bindings v)]
+         resolved-ref v)
+
+       :else v))
+
    x))
 
 (defn extract
@@ -94,12 +120,12 @@
      (extract {:path [:room :ref/id] :request {:name :ref?/name}})
      ;; => #{:ref/id :ref?/name}"
   [x]
-  (let [refs (atom #{})]
+  (let [refs (transient #{})]
     (postwalk
      (fn [v]
-       (when (or (required-reference? v) (optional-reference? v))
-         (swap! refs conj v))
+       (when (reference? v)
+         (conj! refs v))
        v)
      x)
-    @refs))
+    (persistent! refs)))
 

@@ -19,12 +19,19 @@
   "mock-bearer-token-123")
 
 (defn- build-mock-instance [config]
-  (cond-> {:domain      (:domain config)
-           :base-url    (:base-url config)
-           :operations (into {} (map (fn [op] [(:name op) (fn [data] {:status 200 :executed (:name op) :data data})])
-                                     (:operations config)))}
-    (:auth config) (assoc :auth {:state     (atom {:token "xyz"})
-                                 :refresh-fn mock-get-token-fn})))
+  (cond-> {:ehr-adapter/domain           (:domain config)
+           :ehr-adapter/base-url         (:base-url config)
+           :ehr-adapter/request-handler  mock-http-request-handler
+           :ehr-adapter/operations       (into {}
+                                               (map (fn [op]
+                                                      [(:name op)
+                                                       {:handler (fn [ctx _]
+                                                                   {:status 200
+                                                                    :executed (:name op)
+                                                                    :data ctx})}])
+                                                    (:operations config)))}
+    (:auth config) (assoc :ehr-adapter/auth {:state     (atom {:token "xyz"})
+                                             :refresh-fn mock-get-token-fn})))
 
 ;; =============================================================================
 ;; Valid Configurations Tests
@@ -446,32 +453,34 @@
       (is (= instance (schema/validate-adapter-instance instance)))))
 
   (testing "3. Error: Fails if :auth :state is not a real IAtom"
-    (let [instance {:domain    :eclinicalworks/tenant-fail
-                    :base-url  "https://fhir.ecw.com/v1/fhir"
-                    :auth      {:state     {:not-an-atom true}
-                                :refresh-fn mock-get-token-fn}
-                    :operations {:search-patient (fn [_] {})}}]
+    (let [instance {:ehr-adapter/domain           :eclinicalworks/tenant-fail
+                    :ehr-adapter/base-url         "https://fhir.ecw.com/v1/fhir"
+                    :ehr-adapter/request-handler  mock-http-request-handler
+                    :ehr-adapter/auth             {:state     {:not-an-atom true}
+                                                   :refresh-fn mock-get-token-fn}
+                    :ehr-adapter/operations       {:search-patient {:handler (fn [_ _] {})}}}]
       (try
         (schema/validate-adapter-instance instance)
         (is false "Expected ExceptionInfo to be thrown because :state is not an Atom")
         (catch clojure.lang.ExceptionInfo ex
           (let [errors (:details (ex-data ex))]
             (is (some #(str/includes? % "auth state must be a Clojure Atom (IAtom)")
-                      (get-in errors [:auth :state]))))))))
+                      (get-in errors [:ehr-adapter/auth :state]))))))))
 
   (testing "4. Error: Fails if an operation member is not an executable function"
-    (let [instance {:domain    :eclinicalworks/tenant-fail
-                    :base-url  "https://fhir.ecw.com/v1/fhir"
-                    :auth      {:state     (atom {})
-                                :refresh-fn mock-get-token-fn}
-                    :operations {:search-patient {:this-is-not "a function"}}}]
+    (let [instance {:ehr-adapter/domain           :eclinicalworks/tenant-fail
+                    :ehr-adapter/base-url         "https://fhir.ecw.com/v1/fhir"
+                    :ehr-adapter/request-handler  mock-http-request-handler
+                    :ehr-adapter/auth             {:state     (atom {})
+                                                   :refresh-fn mock-get-token-fn}
+                    :ehr-adapter/operations       {:search-patient {:handler {:this-is-not "a function"}}}}]
       (try
         (schema/validate-adapter-instance instance)
         (is false "Expected ExceptionInfo due to uncompiled operation map")
         (catch clojure.lang.ExceptionInfo ex
           (let [errors (:details (ex-data ex))
-                op-errors (get-in errors [:operations :search-patient])]
-            (is (str/includes? (str op-errors) "each operation must be a compiled Clojure function"))))))))
+                op-errors (get-in errors [:ehr-adapter/operations :search-patient :handler])]
+            (is (str/includes? (str op-errors) "the handler must be a compiled Clojure function"))))))))
 
 ;; =============================================================================
 ;; HttpRequest Schema Tests

@@ -74,6 +74,14 @@
             :details {:assertion-type assertion-type
                       :expected expected}}))
 
+(defmethod info :unsupported/invoked-operation
+  [code {:keys [scope message operation value expected]}]
+  (ex-info message {:scope scope
+                    :operation operation
+                    :code code
+                    :details {:invoked-operation value
+                              :expected expected}}))
+
 (defmethod info :missing/field
   [code {:keys [scope operation message field]}]
   (ex-info message
@@ -93,3 +101,4 @@
                          error-body      (assoc :error-body error-body)
                          expected-status (assoc :expected-status expected-status)
                          exception       (assoc :exception exception))}))
+

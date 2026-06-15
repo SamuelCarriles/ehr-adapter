@@ -3,9 +3,18 @@
             [ehr-adapter.reference :as ref]))
 
 (deftest reference?-test
-  (testing "Identifies valid :ref/... keywords"
+  (testing "Identifies valid required :ref/... keywords"
     (is (true? (ref/required-reference? :ref/patientId)))
     (is (true? (ref/required-reference? :ref/encounter-id))))
+
+  (testing "Identifies valid optional :ref?/... keywords"
+    (is (true? (ref/optional-reference? :ref?/patientId))))
+
+  (testing "Combined reference? predicate works for both"
+    (is (true? (ref/reference? :ref/id)))
+    (is (true? (ref/reference? :ref?/id)))
+    (is (false? (ref/reference? :normal/id))))
+  ;; -----------------------------------------------------------
 
   (testing "Rejects keywords from other namespaces or without namespace"
     (is (false? (ref/required-reference? :patient/id)))
@@ -39,21 +48,49 @@
       (is (= [:v1 :Patient "123" :some/other-key]
              (ref/resolve bindings template)))))
 
-  (testing "Throws ExceptionInfo when a reference cannot be resolved"
+  (testing "Resolves optional references to nil when missing"
+    (let [bindings {:id "123"}
+          template {:id :ref/id :name :ref?/name}]
+      (is (= {:id "123" :name nil}
+             (ref/resolve bindings template)))))
+  ;; -----------------------------------------------------------
+
+  (testing "Throws ExceptionInfo when a required reference cannot be resolved"
     (let [bindings {:wrongKey "value"}
           template {:path ["v1" "Patient" :ref/missingId]}]
 
       (try
-        (ref/required-reference? (ref/resolve bindings template))
+        (ref/resolve bindings template)
         (is false "Expected ExceptionInfo to be thrown due to missing binding")
         (catch clojure.lang.ExceptionInfo ex
           (let [ex-msg  (.getMessage ex)
                 ex-meta (ex-data ex)]
             (is (= "The reference :ref/missingId can't be resolved" ex-msg))
-
             (is (= :invalid/reference (:code ex-meta)))
             (is (= template (get-in ex-meta [:details :context])))
             (is (= bindings (get-in ex-meta [:details :ref-bindings])))))))))
+
+(deftest partial-resolve-test
+  (testing "Resolves available references and leaves missing ones intact"
+    (let [bindings {:base-url "https://api.example.com"
+                    :client-id "my-client-123"}
+          template {:base-url :ref/base-url
+                    :auth {:client-id :ref/client-id
+                           :secret :ref/secret}
+                    :operations {:search {:path [:ref/tenant-id "/patients"]}}}
+          expected {:base-url "https://api.example.com"
+                    :auth {:client-id "my-client-123"
+                           :secret :ref/secret}
+                    :operations {:search {:path [:ref/tenant-id "/patients"]}}}]
+
+      (is (= expected (ref/partial-resolve bindings template)))))
+
+  (testing "Leaves missing optional references intact (does not turn them to nil)"
+    (let [bindings {:id "123"}
+          template {:id :ref/id :name :ref?/name :status :ref?/status}]
+      (is (= {:id "123" :name :ref?/name :status :ref?/status}
+             (ref/partial-resolve bindings template))))))
+;; -----------------------------------------------------------
 
 (deftest extract-references-test
   (testing "should return an empty set when no references are present"

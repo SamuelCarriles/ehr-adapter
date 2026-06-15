@@ -15,12 +15,12 @@
 
 (deftest test-full-url
   (testing "Constructs full URL using a static string path"
-    (let [ctx {:base-url "https://api.advancedmd.com"}]
+    (let [ctx {:ehr-adapter/base-url "https://api.advancedmd.com"}]
       (is (= "https://api.advancedmd.com/v1/ping"
              (op/full-url ctx "v1/ping")))))
 
   (testing "Constructs full URL using a dynamic vector path"
-    (let [ctx {:base-url "https://api.advancedmd.com" :patientId "999"}]
+    (let [ctx {:ehr-adapter/base-url "https://api.advancedmd.com" :patientId "999"}]
       (is (= "https://api.advancedmd.com/v1/Patient/999"
              (op/full-url ctx ["v1" "Patient" :ref/patientId]))))))
 
@@ -51,7 +51,7 @@
                  :request {:headers {"X-Static-Header" "static"}
                            :content-type :json}}
         compiled (op/compile op-spec)
-        operation-fn (get-in compiled [:get-patient-history :fn])]
+        operation-fn (get-in compiled [:get-patient-history :handler])]
 
     (testing "Compiler output metadata verification"
       (is (fn? operation-fn))
@@ -59,7 +59,7 @@
       (is (= #{:patientId} (get-in compiled [:get-patient-history :required-keys]))))
 
     (testing "Closure execution: map merging, reference resolution, and deep nil removal"
-      (let [ctx {:base-url "https://api.ehr.com"
+      (let [ctx {:ehr-adapter/base-url "https://api.ehr.com"
                  :patientId "123"
                  :request {:headers {"Authorization" "Bearer TOKEN"
                                      "X-Static-Header" "overridden-value"}

@@ -212,12 +212,20 @@
 
    [:refresh-fn [:fn {:error/message "refresh-fn must be a compiled Clojure function"} fn?]]])
 
+(def CompiledOperation
+  [:map
+   [:handler [:fn {:error/message "the handler must be a compiled Clojure function"} fn?]]
+   [:description {:optional true} :string]
+   [:required-keys {:optional true} [:set :keyword]]
+   [:optional-keys {:optional true} [:set :keyword]]])
+
 (def AdapterInstance
   [:map {:closed true}
-   [:domain :qualified-keyword]
-   [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
-   [:auth {:optional true} RunTimeAuth]
-   [:operations {:optional true} [:map-of :keyword [:fn {:error/message "each operation must be a compiled Clojure function"} fn?]]]])
+   [:ehr-adapter/domain :qualified-keyword]
+   [:ehr-adapter/base-url [:fn {:error/message "ehr-adapter/base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
+   [:ehr-adapter/request-handler [:fn {:error/message "ehr-adapter/request-handler must be a compiled Clojure function"} fn?]]
+   [:ehr-adapter/auth {:optional true} RunTimeAuth]
+   [:ehr-adapter/operations {:optional true} [:map-of :keyword CompiledOperation]]])
 
 ;; =================================================================
 ;; Validators

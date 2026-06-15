@@ -54,7 +54,7 @@
   "Constructs a complete URL by resolving the path against the context (ctx) 
    and appending it to the base-url found within the context."
   [ctx path]
-  (let [{:keys [base-url]} ctx
+  (let [base-url (:ehr-adapter/base-url ctx)
         path (if (string? path) path (path->str ctx path))]
     (str base-url "/" path)))
 
@@ -93,8 +93,12 @@
                    (ref/resolve ctx)
                    clean-nil
                    req-handler)))]
-    {(:name op) (merge {:fn operation :description description}
-                       (clasify-ref-keys (ref/extract op)))}))
+    (let [op-name (:name op)
+          ref-keys (clasify-ref-keys (ref/extract op))
+          op-map (cond-> (merge {:handler operation} ref-keys)
+                   description
+                   (assoc :description description))]
+      {op-name op-map})))
 
 
 
