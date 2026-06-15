@@ -36,7 +36,7 @@
         token (->base64 (format "%s:%s" username password))
         auth-data {:token token
                    :token-type "Basic"}
-        auth-header (header/authorization token "Basic")]
+        auth-header (header/authorization auth-data)]
     (if-not req-opts
       auth-data
       (-> req-opts

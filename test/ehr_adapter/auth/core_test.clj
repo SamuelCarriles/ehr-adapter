@@ -175,3 +175,95 @@
         (let [headers (:headers result)]
           (is (map? headers))
           (is (= "Initial-Header" (get headers "Authorization"))))))))
+
+;; ==================================================================
+;; Token realated tests 
+;; ==================================================================
+
+(deftest token-expired?-test
+  (testing "Token is strictly expired (past expires-at)"
+    (with-redefs [time/now (constantly 1100)]
+      (is (true? (core/token-expired? {:expires-at 1000} 0)))
+      (is (true? (core/token-expired? {:expires-at 1000} 60)))))
+
+  (testing "Token is strictly valid (future expires-at)"
+    (with-redefs [time/now (constantly 900)]
+      (is (false? (core/token-expired? {:expires-at 1000} 0)))
+      (is (false? (core/token-expired? {:expires-at 1000} 60)))))
+
+  (testing "Buffer behavior: expires-at is within the proactive refresh window"
+    ;; expires-at is 1000, buffer is 60. Alert threshold is 940.
+    (with-redefs [time/now (constantly 950)]
+      ;; 950 >= (1000 - 60) -> 950 >= 940 -> true (expired, triggers proactive refresh)
+      (is (true? (core/token-expired? {:expires-at 1000} 60)))
+      ;; With 0 buffer, 950 >= 1000 -> false (not expired yet)
+      (is (false? (core/token-expired? {:expires-at 1000} 0)))))
+
+  (testing "Buffer behavior: exactly at the boundary"
+    ;; expires-at is 1000, buffer is 60. Alert threshold is 940.
+    (with-redefs [time/now (constantly 940)]
+      (is (true? (core/token-expired? {:expires-at 1000} 60)))))
+
+  (testing "Missing expires-at key (nil)"
+    ;; Should return false (not expired) to avoid unnecessary refreshes if the auth server didn't provide it
+    (with-redefs [time/now (constantly 9999)]
+      (is (false? (core/token-expired? {} 60)))
+      (is (false? (core/token-expired? {:expires-at nil} 60)))))
+
+  (testing "Single arity defaults to 0 buffer"
+    (with-redefs [time/now (constantly 1000)]
+      ;; Exactly at expiration: 1000 >= (1000 - 0) -> true
+      (is (true? (core/token-expired? {:expires-at 1000})))
+      ;; 1 second before expiration: 1000 >= (1001 - 0) -> false
+      (is (false? (core/token-expired? {:expires-at 1001})))
+      ;; 1 second after expiration: 1000 >= (999 - 0) -> true
+      (is (true? (core/token-expired? {:expires-at 999}))))))
+
+(defn- make-auth-data [initial-state refresh-fn]
+  {:state (atom initial-state)
+   :refresh-fn refresh-fn})
+
+(deftest ensure-token!-test
+  (with-redefs [time/now (constantly 1000)]
+    (testing "1. Valid token: doesn't call refresh-fn and returns auth-data unchanged"
+      (let [refresh-called? (atom false)
+            refresh-fn (fn [_] (reset! refresh-called?  true) {:token "new"})
+            auth-data (make-auth-data {:token "valid" :expires-at 2000} refresh-fn)]
+        (is (= auth-data (core/ensure-token! auth-data 60)))
+        (is (false? @refresh-called?) "refresh-fn should not be called for valid token")
+        (is (= {:token "valid" :expires-at 2000} @(:state auth-data)) "Atom state remains unchanged")))
+
+    (testing "2. Expired token (single thread): calls refresh-fn, updates atom, returns auth-data"
+      (let [refresh-called? (atom false)
+            refresh-fn (fn [_] (reset! refresh-called? true) {:token "refreshed" :expires-at 3000})
+            auth-data (make-auth-data {:token "expired" :expires-at 900} refresh-fn)]
+
+        (is (= auth-data (core/ensure-token! auth-data 60)))
+        (is (true? @refresh-called?) "refresh-fn should be called for expired token")
+        (is (= {:token "refreshed" :expires-at 3000} @(:state auth-data)) "Atom state updated with new token")))
+
+    (testing "3. Concurrent access: Only one leader refreshes, followers wait and succeed"
+      (let [refresh-count (atom 0)
+            refresh-fn (fn [_] (Thread/sleep 50)
+                         (swap! refresh-count inc)
+                         {:token "concurrent-refreshed" :expires-at 4000})
+            auth-data (make-auth-data {:token "expired" :expires-at 900} refresh-fn)
+
+            futures (doall (repeatedly 5 #(future (core/ensure-token! auth-data 60))))]
+
+        (doseq [f futures] @f)
+
+        (is (= 1 @refresh-count) "Only ONE refresh should occur despite 5 concurrent calls")
+        (is (= {:token "concurrent-refreshed" :expires-at 4000} @(:state auth-data)))))
+
+    (testing "4. Refresh failure: Exception propagates, atom state is restored"
+      (let [refresh-fn (fn [_] (Thread/sleep 50) (throw (ex-info "Auth server down" {})))
+            auth-data (make-auth-data {:token "expired" :expires-at 900} refresh-fn)
+            caught-errors (atom [])
+            futures (doall (repeatedly 2 #(future (try (core/ensure-token! auth-data 60)
+                                                       (catch Throwable e (swap! caught-errors conj e))))))]
+
+        (doseq [f futures] @f)
+
+        (is (>= (count @caught-errors) 1) "At least one thread must catch the exception")
+        (is (= {:token "expired" :expires-at 900} @(:state auth-data)) "Atom state MUST be restored after failure")))))

@@ -1,6 +1,5 @@
 (ns ehr-adapter.http.network-config
-  (:require [clojure.tools.logging :as log]
-            [ehr-adapter.auth.core :refer [token-expired?]]))
+  (:require [clojure.tools.logging :as log]))
 
 (defn needs-retry?
   [response retry-on attempt max-retries]
@@ -58,3 +57,7 @@
             (if (instance? Throwable response)
               (throw response)
               response)))))))
+
+
+
+

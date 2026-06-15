@@ -210,11 +210,7 @@
    [:state [:fn {:error/message "auth state must be a Clojure Atom (IAtom)"}
             (fn [s] (instance? clojure.lang.IAtom s))]]
 
-   [:get-token [:fn {:error/message "get-token must be a compiled Clojure function"} fn?]]
-
-   [:config [:map
-             [:initial [:vector Authentication]]
-             [:refresh {:optional true} [:vector Authentication]]]]])
+   [:refresh-fn [:fn {:error/message "refresh-fn must be a compiled Clojure function"} fn?]]])
 
 (def AdapterInstance
   [:map {:closed true}

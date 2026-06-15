@@ -107,7 +107,7 @@
         (= :fhir/json code))))
 
 (defn authorization
-  [token token-type]
+  [{:keys [token token-type]}]
   (when-not (and token token-type)
     (let [missing-field (cond-> []
                           (not token) (conj :token)

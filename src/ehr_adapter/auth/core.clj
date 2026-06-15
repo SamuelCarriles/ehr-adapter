@@ -90,11 +90,43 @@
    auth-layers))
 
 (defn token-expired?
-  [{:keys [expires-at]}]
-  (and (some? expires-at)
-       (>= (now) expires-at)))
+  ([state] (token-expired? state 0))
+  ([{:keys [expires-at]} buff-secs]
+   (and (some? expires-at)
+        (>= (now) (- expires-at buff-secs)))))
 
 (defn refresh
   [auth-layers request-handler]
   (fn [ctx]
     (run ctx auth-layers request-handler)))
+
+(defn ensure-token!
+  [{:keys [state refresh-fn] :as auth-data} buffer-secs]
+  (let [current @state]
+    (cond
+
+      (instance? clojure.lang.IPending current)
+      (let [result @current]
+        (if (instance? Throwable result)
+          (throw result)
+          auth-data))
+
+      (token-expired? current buffer-secs)
+      (let [new-promise (promise)]
+        (if (compare-and-set! state current new-promise)
+          (try
+            (let [new-state (refresh-fn current)]
+              (deliver new-promise new-state)
+              (reset! state new-state)
+              auth-data)
+            (catch Throwable e
+              (deliver new-promise e)
+              (reset! state current)
+              (throw e)))
+
+          (recur auth-data buffer-secs)))
+
+      :else auth-data)))
+
+
+

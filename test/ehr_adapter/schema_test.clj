@@ -24,8 +24,7 @@
            :operations (into {} (map (fn [op] [(:name op) (fn [data] {:status 200 :executed (:name op) :data data})])
                                      (:operations config)))}
     (:auth config) (assoc :auth {:state     (atom {:token "xyz"})
-                                 :get-token mock-get-token-fn
-                                 :config    (:auth config)})))
+                                 :refresh-fn mock-get-token-fn})))
 
 ;; =============================================================================
 ;; Valid Configurations Tests
@@ -450,8 +449,7 @@
     (let [instance {:domain    :eclinicalworks/tenant-fail
                     :base-url  "https://fhir.ecw.com/v1/fhir"
                     :auth      {:state     {:not-an-atom true}
-                                :get-token mock-get-token-fn
-                                :config    {:initial [{:type :basic-auth :username "u" :password "p"}]}}
+                                :refresh-fn mock-get-token-fn}
                     :operations {:search-patient (fn [_] {})}}]
       (try
         (schema/validate-adapter-instance instance)
@@ -465,8 +463,7 @@
     (let [instance {:domain    :eclinicalworks/tenant-fail
                     :base-url  "https://fhir.ecw.com/v1/fhir"
                     :auth      {:state     (atom {})
-                                :get-token mock-get-token-fn
-                                :config    {:initial [{:type :basic-auth :username "u" :password "p"}]}}
+                                :refresh-fn mock-get-token-fn}
                     :operations {:search-patient {:this-is-not "a function"}}}]
       (try
         (schema/validate-adapter-instance instance)
