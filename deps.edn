@@ -17,5 +17,10 @@
   :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.14"}}
           :ns-default build}}
 
+ :deploy {:extra-deps {slipset/deps-deploy {:mvn/version "0.2.5"}}
+          :exec-fn deps-deploy.deps-deploy/deploy
+          :exec-args {:installer :remote
+                      :artifact "target/ehr-adapter-1.0.0.jar"}}
+
  :license {:name "MIT License"
            :url "https://opensource.org/license/MIT"}}
