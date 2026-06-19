@@ -40,14 +40,16 @@ This is how explicit, robust, and readable an adapter configuration looks using 
 ```clojure
 (require '[ehr-adapter.core :as ehr]
          '[babashka.http-client :as http]
-         '[ehr-adapter.middleware.bb-http-client :as bb-middleware])
+         '[ehr-adapter.middleware.bb-http-client :as bb-middleware]
+         '[ehr-adapter.middleware.serialize.jsonista :as jsonista])
 
 (def eclinicalworks-adapter-config
   {:domain :eclinicalworks/tenant-beta
 
    :base-url "https://staging-fhir.ecw.com/fhir/r4"
 
-   :middlewares [bb-middleware/wrap-request-handler]
+   :middlewares [bb-middleware/wrap-request-handler
+                 jsonista/wrap-jsonista]
 
    :network-config {:request-handler http/request}
 
@@ -67,8 +69,7 @@ This is how explicit, robust, and readable an adapter configuration looks using 
 (def adapter (ehr/initialize eclinicalworks-adapter-config))
 
 ;; Invoke the operation
-(ehr/invoke adapter :get-patient-by-id {:patientId "12345"
-                                        :request {:as :json}})
+(ehr/invoke adapter :get-patient-by-id {:patientId "12345"})
 ;; => {:status 200, :body {:resourceType "Patient", ...}}
 ```
 
