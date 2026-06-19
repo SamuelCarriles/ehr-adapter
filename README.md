@@ -4,6 +4,7 @@
   </a>
   <img src="https://img.shields.io/badge/clj-1.12+-%2391DE51?logo=clojure&logoColor=white" alt="Clojure Version">
   <img src="https://github.com/SamuelCarriles/ehr-adapter/actions/workflows/tests.yml/badge.svg" alt="Tests Status">
+  <a href="https://deepwiki.com/SamuelCarriles/ehr-adapter"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 # ehr-adapter
