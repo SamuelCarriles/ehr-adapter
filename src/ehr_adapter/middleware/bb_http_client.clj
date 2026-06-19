@@ -23,10 +23,9 @@
 (defn <-bb-response
   [response]
   (let [content-type (get-in response [:headers "content-type"])]
-    (-> (set/rename-keys response bb-keys->motor-keys)
-        (update :headers dissoc "content-type")
-        (cond->
-         content-type (assoc :content-type (h/parse-mime content-type))))))
+    (cond-> (set/rename-keys response bb-keys->motor-keys)
+
+      content-type (assoc :content-type (h/parse-mime content-type)))))
 
 (defn wrap-request-handler
   "Middleware that adapts internal engine requests to Babashka HTTP client format and vice versa.
