@@ -15,22 +15,22 @@ A Clojure library for declarative, data-driven EHR integrations.
 Add the following dependency to your `deps.edn`:
 
 ```clojure
-io.github.samuelcarriles/ehr-adapter {:mvn/version "1.0.0"}
+io.github.samuelcarriles/ehr-adapter {:mvn/version "1.0.1"}
 ```
 
 Or to your `project.clj`:
 
 ```clojure
-[io.github.samuelcarriles/ehr-adapter "1.0.0"]
+[io.github.samuelcarriles/ehr-adapter "1.0.1"]
 ```
 
 ## Core Concepts
 
-  1. **Data-Driven Architecture**: Define your entire adapter using Clojure maps. No classes, no hidden state.
-  2. **Partial Resolution**: Use `:ref/` keywords to create reusable templates. Static values resolve at initialization; dynamic values resolve at runtime.
-  3. **Thread-Safe Auth**: Built-in proactive token refresh with Leader/Follower concurrency pattern.
-  4. **Strict Validation**: Runtime validation via Malli ensures your configuration is correct before execution.
-  5. **Extensible**: Add custom authentication strategies or middlewares using Clojure's multimethods.
+1. **Data-Driven Architecture**: Define your entire adapter using Clojure maps. No classes, no hidden state.
+2. **Partial Resolution**: Use `:ref/` keywords to create reusable templates. Static values resolve at initialization; dynamic values resolve at runtime.
+3. **Thread-Safe Auth**: Built-in proactive token refresh with Leader/Follower concurrency pattern.
+4. **Strict Validation**: Runtime validation via Malli ensures your configuration is correct before execution.
+5. **Extensible**: Add custom authentication strategies or middlewares using Clojure's multimethods.
 
 ## Quick Start
 
