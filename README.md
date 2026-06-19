@@ -1,72 +1,82 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License MIT">
+  <a href="https://clojars.org/io.github.samuelcarriles/ehr-adapter">
+    <img src="https://img.shields.io/clojars/v/io.github.samuelcarriles/ehr-adapter.svg" alt="Clojars Project">
+  </a>
   <img src="https://img.shields.io/badge/clj-1.12+-%2391DE51?logo=clojure&logoColor=white" alt="Clojure Version">
   <img src="https://github.com/SamuelCarriles/ehr-adapter/actions/workflows/tests.yml/badge.svg" alt="Tests Status">
 </p>
 
 # ehr-adapter
 
-`ehr-adapter` is a Clojure library designed to solve the most frustrating problem in healthcare software development: integrating with multiple Electronic Health Record (EHR) providers.
+A Clojure library for declarative, data-driven EHR integrations.
 
-## The Motivation
+## Installation
 
-Connecting a backend service with an EHR provider (such as Epic, eClinicalWorks, AdvancedMD, etc.) is typically a tedious, inconsistent process riddled with "spaghetti code." Every provider implements security in their own way, utilizes hybrid or proprietary authentication flows, and structures their endpoint paths whimsically. Generic FHIR libraries often fail in production because they assume a perfect world where everyone follows official standards to the letter.
+Add the following dependency to your `deps.edn`:
 
-`ehr-adapter` was born with a clear goal: **Save engineering time**. We aim to transform a process prone to human error into a **simple, explicit, and declarative** task.
+```clojure
+io.github.samuelcarriles/ehr-adapter {:mvn/version "1.0.0"}
+```
 
-## Key Ideas & Philosophy
+Or to your `project.clj`:
 
-The library's architecture stands on three core pillars:
+```clojure
+[io.github.samuelcarriles/ehr-adapter "1.0.0"]
+```
 
-### 1. Data-Driven Architecture
+## Core Concepts
 
-In `ehr-adapter`, **everything is a Clojure map**. There are no rigid classes, complex objects, or hidden configurations. The entire adapter infrastructure—from how you log in to the definition of clinical endpoints—is declared using native, transparent, and easy-to-audit data structures validated strictly at runtime via Malli.
+  1. **Data-Driven Architecture**: Define your entire adapter using Clojure maps. No classes, no hidden state.
+  2. **Partial Resolution**: Use `:ref/` keywords to create reusable templates. Static values resolve at initialization; dynamic values resolve at runtime.
+  3. **Thread-Safe Auth**: Built-in proactive token refresh with Leader/Follower concurrency pattern.
+  4. **Strict Validation**: Runtime validation via Malli ensures your configuration is correct before execution.
+  5. **Extensible**: Add custom authentication strategies or middlewares using Clojure's multimethods.
 
-### 2. Inverted & Decoupled Flow (`:bindings`)
-
-Instead of building complex hardcoded middlewares that blindly "push" data from one function to another, the library implements a declarative **inverted resolution (_pull_)** pattern. The layers that need information explicitly declare what data they need to extract from the global context using a `:bindings` map. This keeps the library core 100% decoupled and ready to tame complex or hybrid authentication pipelines.
-
-### 3. Dynamic Endpoint Compilation
-
-You define pure data templates for your operations (e.g., `["v1/Patient" :ref/patientId]`), and the `ehr-adapter` engine compiles them on the fly into safe, highly efficient Clojure functions that are rigorously validated against strict contracts.
-
-## Quick Glance
+## Quick Start
 
 This is how explicit, robust, and readable an adapter configuration looks using **Babashka's HTTP client** as the core transportation layer:
 
 ```clojure
 (require '[ehr-adapter.core :as ehr]
-         '[babashka.http-client :as http])
+         '[babashka.http-client :as http]
+         '[ehr-adapter.middleware.bb-http-client :as bb-middleware])
 
 (def eclinicalworks-adapter-config
   {:domain :eclinicalworks/tenant-beta
 
-   :base-url "https://api.interop-ehr.com/v2"
+   :base-url "https://staging-fhir.ecw.com/fhir/r4"
 
-   :network-config {:request-handler babashka.http-client/request}
+   :middlewares [bb-middleware/wrap-request-handler]
 
-   :middlewares [ehr-adapter.middleware.bb-http-client/wrap-request-handler]
+   :network-config {:request-handler http/request}
 
-   :auth {:initial [{:type          :oauth2
-                     :token-url     "https://auth.interop-ehr.com/v2/oauth2/token"
-                     :grant-type    "client_credentials"
-                     :client-id      "prod-client-id-xyz"
+   :auth {:initial [{:type :oauth2
+                     :token-url "https://staging-fhir.ecw.com/fhir/oauth2/token"
+                     :grant-type "client_credentials"
+                     :client-id "prod-client-id-xyz"
+                     :scopes ["patient/*.read"]
                      :client-secret "super-secure-secret"}]}
 
-   ;; Operations that will be compiled into executable functions
-   :operations [{:name :search-patient
+   :operations [{:name :get-patient-by-id
                  :method :get
-                 :path ["v1/Patient" :ref/patientId]
-                 :description "Search for a patient using their unique identifier."}]})
+                 :path ["Patient" :ref/patientId]
+                 :description "Retrieve a patient by their unique identifier."}]})
 
 ;; Initialize the engine
 (def adapter (ehr/initialize eclinicalworks-adapter-config))
 
-;; Invoke the operation cleanly within your business logic
-(ehr/invoke adapter :search-patient {:patientId "12345"})
-
+;; Invoke the operation
+(ehr/invoke adapter :get-patient-by-id {:patientId "12345"
+                                        :request {:as :json}})
+;; => {:status 200, :body {:resourceType "Patient", ...}}
 ```
 
 ## Complete Configuration Guide
 
 To understand the exact structure of the configuration map, the data types supported by the validator, the behavior of the network resiliency engine, and the exhaustive breakdown of each authentication strategy (including advanced usage of `:bindings`), please check the official technical reference guide at: **[`Configuration Reference Guide`](https://github.com/SamuelCarriles/ehr-adapter/wiki/Adapter-Configuration-Guide)**
+
+## License
+
+Copyright © 2024 Samuel Carriles
+
+Distributed under the MIT License.
