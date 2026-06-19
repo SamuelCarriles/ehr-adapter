@@ -4,6 +4,7 @@
    [clojure.string :as str]
    [clojure.walk :refer [postwalk]]
    [clojure.set :refer [difference]]
+   [ehr-adapter.schema :as schema]
    [ehr-adapter.reference :as ref]))
 
 (defn- deep-merge
@@ -79,7 +80,9 @@
    The compiled function expects a runtime context map and a request handler."
   [{:keys [path method request description] :as op}]
   (letfn [(operation [ctx req-handler]
-            (let [full-url (full-url ctx path)
+            (let [full-url (->> path
+                                (full-url ctx)
+                                schema/validate-url)
 
                   new-req (:request ctx)
 

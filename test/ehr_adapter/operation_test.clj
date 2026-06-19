@@ -58,6 +58,16 @@
       (is (= "Fetch patient clinical history" (get-in compiled [:get-patient-history :description])))
       (is (= #{:patientId} (get-in compiled [:get-patient-history :required-keys]))))
 
+    (testing "Throws ExceptionInfo when the generated URL is invalid"
+      (let [op-spec {:name :bad-url-op
+                     :method :get
+                     :path ["v1" "Patient"]}
+            compiled (op/compile op-spec)
+            operation-fn (get-in compiled [:bad-url-op :handler])
+            ctx {:base-url "not-a-valid-url"}]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"The given URL is not valid"
+                              (operation-fn ctx (fn [req] req))))))
+
     (testing "Closure execution: map merging, reference resolution, and deep nil removal"
       (let [ctx {:ehr-adapter/base-url "https://api.ehr.com"
                  :patientId "123"

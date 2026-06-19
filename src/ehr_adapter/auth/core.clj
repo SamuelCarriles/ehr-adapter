@@ -1,6 +1,6 @@
 (ns ehr-adapter.auth.core
   (:require [ehr-adapter.auth.strategy :as strategy]
-            [ehr-adapter.reference :refer [resolve]]
+            [ehr-adapter.reference :as ref]
             [ehr-adapter.time :refer [now]]
             [ehr-adapter.http.core :as http]
             [ehr-adapter.error :as error]))
@@ -53,7 +53,7 @@
   [ctx layer request-handler]
   (let [layer-type (:type layer)
         full-ctx (full-context ctx (:bindings layer))
-        ready-layer (resolve full-ctx (dissoc layer :bindings))]
+        ready-layer (ref/resolve full-ctx (dissoc layer :bindings))]
     (if (= :normalize layer-type)
       (normalize full-ctx ready-layer)
 

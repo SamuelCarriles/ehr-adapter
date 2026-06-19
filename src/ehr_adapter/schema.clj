@@ -13,6 +13,17 @@
   (and (string? s)
        (.isValid (UrlValidator/getInstance) s)))
 
+(defn validate-url
+  [url]
+  (if (absolute-url? url)
+    url
+    (throw (error/info :invalid/format
+                       {:message "The given URL is not valid"
+                        :scope :ehr-adapter.schema
+                        :operation :validate
+                        :value url
+                        :expected "Valid URL under RFC 2396"}))))
+
 (defn no-trailing-slash-url?
   "Returns true if s is a valid absolute URL and does not end with a slash"
   [^String s]

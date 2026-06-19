@@ -33,6 +33,30 @@
     (:auth config) (assoc :ehr-adapter/auth {:state     (atom {:token "xyz"})
                                              :refresh-fn mock-get-token-fn})))
 
+;; ========================================================================
+;; URL validator
+;; ========================================================================
+
+(deftest validate-url-test
+  (testing "Returns the URL unchanged if it is valid"
+    (is (= "https://api.ehr.com/v1/Patient"
+           (schema/validate-url "https://api.ehr.com/v1/Patient"))))
+
+  (testing "Throws :invalid/format exception if the URL is invalid"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"The given URL is not valid"
+                          (schema/validate-url "not-a-valid-url")))
+
+    (testing "Error payload matches the domain error contract"
+      (try
+        (schema/validate-url "api.ehr.com/v1")
+        (catch clojure.lang.ExceptionInfo e
+          (let [data (ex-data e)]
+            (is (= :invalid/format (:code data)))
+            (is (= :ehr-adapter.schema (:scope data)))
+            (is (= :validate (:operation data)))
+            (is (= "Valid URL under RFC 2396" (get-in data [:details :expected])))))))))
+
 ;; =============================================================================
 ;; Valid Configurations Tests
 ;; =============================================================================
