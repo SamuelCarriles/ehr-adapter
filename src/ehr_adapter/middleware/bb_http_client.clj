@@ -24,10 +24,9 @@
   [response]
   (let [content-type (get-in response [:headers "content-type"])]
     (cond-> (set/rename-keys response bb-keys->motor-keys)
-
       content-type (assoc :content-type (h/parse-mime content-type)))))
 
-(defn wrap-request-handler
+(defn wrap
   "Middleware that adapts internal engine requests to Babashka HTTP client format and vice versa.
    
    It translates the incoming request, executes the wrapped handler, unifies any network 

@@ -1,8 +1,8 @@
 (ns ehr-adapter.middleware.serialize.jsonista
   (:require [ehr-adapter.http.header :refer [json-media-type?]]))
 
-(defn wrap-jsonista
-  ([handler] (wrap-jsonista handler @(requiring-resolve 'jsonista.core/keyword-keys-object-mapper)))
+(defn wrap
+  ([handler] (wrap handler @(requiring-resolve 'jsonista.core/keyword-keys-object-mapper)))
   ([handler object-mapper]
    (let [write-string (requiring-resolve 'jsonista.core/write-value-as-string)
          read-value (requiring-resolve 'jsonista.core/read-value)]
