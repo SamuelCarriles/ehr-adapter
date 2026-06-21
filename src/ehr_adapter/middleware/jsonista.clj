@@ -1,4 +1,4 @@
-(ns ehr-adapter.middleware.serialize.jsonista
+(ns ehr-adapter.middleware.jsonista
   (:require [ehr-adapter.http.header :refer [json-media-type?]]))
 
 (defn wrap

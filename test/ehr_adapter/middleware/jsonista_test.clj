@@ -1,6 +1,6 @@
-(ns ehr-adapter.middleware.serialize.jsonista-test
+(ns ehr-adapter.middleware.jsonista-test
   (:require [clojure.test :refer [deftest is testing]]
-            [ehr-adapter.middleware.serialize.jsonista :refer [wrap]]))
+            [ehr-adapter.middleware.jsonista :refer [wrap]]))
 
 (deftest wrap-jsonista-test
   (testing "Serializes body when content-type is :json"
