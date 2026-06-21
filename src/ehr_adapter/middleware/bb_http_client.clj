@@ -17,8 +17,12 @@
         (assoc :throw false)
         (dissoc :content-type :accept)
         (cond->
-         content-type (update :headers merge (h/content-type content-type))
-         accept (update :headers merge (h/accept accept))))))
+         (and content-type
+              (not= :form-url-encoded content-type)
+              (not= :form-url-encoded (:code content-type)))
+          (update :headers merge (h/content-type content-type))
+
+          accept (update :headers merge (h/accept accept))))))
 
 (defn <-bb-response
   [response]

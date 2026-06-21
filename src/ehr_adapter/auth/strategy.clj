@@ -110,5 +110,3 @@
 (defmethod execute :smart-on-fhir/backend-services
   [layer request-handler]
   (smart-on-fhir-backend-services layer request-handler))
-
-;; TODO: Hay que revisar la request que se está construyendo porque no es correcta
