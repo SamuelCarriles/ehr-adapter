@@ -49,7 +49,7 @@
 ;; =============================================================================
 
 (deftest <-bb-response-test
-  (testing "Parses content-type header into structured engine map"
+  (testing "Parses content-type header into structured engine map AND keeps it in headers"
     (let [response {:status 200
                     :body "{}"
                     :headers {"content-type" "application/fhir+json; charset=utf-8"
@@ -57,7 +57,7 @@
           result (<-bb-response response)]
       (is (= {:code :fhir/json :properties {"charset" "utf-8"}}
              (:content-type result)))
-      (is (nil? (get-in result [:headers "content-Type"])))
+      (is (= "application/fhir+json; charset=utf-8" (get-in result [:headers "content-type"])))
       (is (= "nginx" (get-in result [:headers "server"])))))
 
   (testing "No :content-type in response leaves headers untouched"
@@ -68,12 +68,13 @@
       (is (nil? (:content-type result)))
       (is (= "nginx" (get-in result [:headers "server"])))))
 
-  (testing "Plain JSON content-type parses correctly"
+  (testing "Plain JSON content-type parses correctly and remains in headers"
     (let [response {:status 200
                     :body "{}"
                     :headers {"content-type" "application/json"}}
           result (<-bb-response response)]
-      (is (= {:code :json} (:content-type result))))))
+      (is (= {:code :json} (:content-type result)))
+      (is (= "application/json" (get-in result [:headers "content-type"]))))))
 
 ;; =============================================================================
 ;; wrap-bb-http-client Tests
