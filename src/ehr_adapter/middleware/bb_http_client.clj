@@ -47,7 +47,6 @@
   (fn [req]
     (let [bb-req (->bb-req req)
           response (try
-                     (println bb-req)
                      (handler bb-req)
                      (catch Exception e
                        (throw (error/info :http/failure
