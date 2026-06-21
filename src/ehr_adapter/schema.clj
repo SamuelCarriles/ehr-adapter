@@ -178,7 +178,6 @@
     [:retry-strategy {:optional true} [:enum {:error/message "retry-strategy must be either :linear or :exponential"}
                                        :linear :exponential]]
     [:before-retry {:optional true} [:fn {:error/message "on-retry must be a Clojure function"} fn?]]
-    [:client {:optional true} :any]
     [:request-handler [:fn {:error/message "request-handler must be a Clojure function"} fn?]]]])
 
 (def Operation
