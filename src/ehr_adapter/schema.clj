@@ -86,13 +86,7 @@
       (mu/dissoc :method)
       (mu/dissoc :url)))
 
-(def HttpResponse
-  [:map
-   [:status :int]
-   [:headers {:optional true} [:map-of :string :any]]
-   [:body {:optional true}]])
-
-;; =================================================================
+;: =================================================================
 ;; JWK 
 (def PublicJWK
   [:map
@@ -112,6 +106,15 @@
     [:dq {:optional true} [:fn {:error/message "The field \"dq\" in the JWK must be a non-blank string"} not-blank-str?]]
     [:qi {:optional true} [:fn {:error/message "The field \"qi\" in the JWK must be a non-blank string"} not-blank-str?]]]))
 
+(def JWK
+  [:map
+   [:kty [:fn {:error/message "The field \"kty\" in the JWK must be a non-blank string"} not-blank-str?]]
+   [:kid [:fn {:error/message "The field \"kid\" in the JWK must be a non-blank string"} not-blank-str?]]])
+
+(def JWKS
+  [:map
+   [:keys [:vector JWK]]])
+
 ;; ===========================================================
 ;; Auth Strategies or Layers (sub-schemas for Authentication)
 
@@ -121,16 +124,22 @@
    [:password [:fn {:error/message "password must be a non-blank string"} not-blank-str?]]])
 
 (def SmartOnFHIR
-  [:map
-   [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
-   [:private-key [:or
-                  [:fn {:error/message "private-key must be a non-blank string"} not-blank-str?]
-                  PrivateJWK]]
-   [:key-id [:fn {:error/message "key-id must be a non-blank string"} not-blank-str?]]
-   [:algorithm [:fn {:error/message "algorithm must be a keyword and a supported algorithm by buddy-sign library"} supported-alg?]]
-   [:audience [:fn {:error/message "audience must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
-   [:scopes [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
-   [:token-url [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]])
+  [:and
+   [:fn {:error/message "You must provide either :private-key or :private-key-set, but not both"}
+    (fn [{:keys [private-key private-key-set]}]
+      (= (some? private-key) (nil? private-key-set)))]
+
+   [:map
+    [:client-id [:fn {:error/message "client-id must be a non-blank string"} not-blank-str?]]
+    [:private-key-set {:optional true} JWKS]
+    [:private-key {:optional true} [:multi {:dispatch (fn [x] (if (map? x) :map :string))}
+                                    [:map JWK]
+                                    [:string [:fn {:error/message "private-key must be a non-blank string or a map"} not-blank-str?]]]]
+    [:key-id [:fn {:error/message "key-id must be a non-blank string"} not-blank-str?]]
+    [:algorithm [:fn {:error/message "algorithm must be a keyword and a supported algorithm by buddy-sign library"} supported-alg?]]
+    [:audience [:fn {:error/message "audience must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
+    [:scopes [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]
+    [:token-url [:fn {:error/message "token-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]]])
 
 (def OAuth2
   [:map
@@ -266,11 +275,10 @@
   [mime-code-map]
   (validate-schema MimeCodeMap mime-code-map "Invalid Mime code map"))
 
-(defn validate-public-jwk
-  [jwk-map]
-  (validate-schema PublicJWK jwk-map "Invalid public JWK"))
+(defn validate-jwk
+  [jwk]
+  (validate-schema JWK jwk "Invalid JWK"))
 
-(defn validate-private-jwk
-  [jwk-map]
-  (validate-schema PrivateJWK jwk-map "Invalid private JWK"))
-
+(defn validate-jwks
+  [jwks]
+  (validate-schema JWKS jwks "Invalid JWKS"))

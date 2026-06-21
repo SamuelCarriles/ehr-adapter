@@ -1,6 +1,6 @@
 (ns ehr-adapter.middleware.bb-http-client-test
   (:require [clojure.test :refer [deftest is testing]]
-            [ehr-adapter.middleware.bb-http-client :refer [->bb-req <-bb-response wrap-request-handler]]))
+            [ehr-adapter.middleware.bb-http-client :refer [->bb-req <-bb-response wrap]]))
 
 ;; =============================================================================
 ;; ->bb-req Tests
@@ -49,7 +49,7 @@
 ;; =============================================================================
 
 (deftest <-bb-response-test
-  (testing "Parses content-type header into structured engine map"
+  (testing "Parses content-type header into structured engine map AND keeps it in headers"
     (let [response {:status 200
                     :body "{}"
                     :headers {"content-type" "application/fhir+json; charset=utf-8"
@@ -57,7 +57,7 @@
           result (<-bb-response response)]
       (is (= {:code :fhir/json :properties {"charset" "utf-8"}}
              (:content-type result)))
-      (is (nil? (get-in result [:headers "content-Type"])))
+      (is (= "application/fhir+json; charset=utf-8" (get-in result [:headers "content-type"])))
       (is (= "nginx" (get-in result [:headers "server"])))))
 
   (testing "No :content-type in response leaves headers untouched"
@@ -68,12 +68,13 @@
       (is (nil? (:content-type result)))
       (is (= "nginx" (get-in result [:headers "server"])))))
 
-  (testing "Plain JSON content-type parses correctly"
+  (testing "Plain JSON content-type parses correctly and remains in headers"
     (let [response {:status 200
                     :body "{}"
                     :headers {"content-type" "application/json"}}
           result (<-bb-response response)]
-      (is (= {:code :json} (:content-type result))))))
+      (is (= {:code :json} (:content-type result)))
+      (is (= "application/json" (get-in result [:headers "content-type"]))))))
 
 ;; =============================================================================
 ;; wrap-bb-http-client Tests
@@ -87,7 +88,7 @@
                      :headers {"content-type" "application/json"
                                "server" "nginx"}
                      :request bb-req})
-          wrapped (wrap-request-handler handler)
+          wrapped (wrap handler)
           result (wrapped {:method :get
                            :url "https://api.ehr.com/Patient"
                            :timeout-ms 3000
@@ -103,7 +104,7 @@
                      :body ""
                      :headers {}
                      :request bb-req})
-          wrapped (wrap-request-handler handler)
+          wrapped (wrap handler)
           result (wrapped {:method :post
                            :url "https://api.ehr.com/Patient"
                            :timeout-ms 5000
@@ -125,7 +126,7 @@
                      :body "{\"error\": \"unauthorized\"}"
                      :headers {"content-type" "application/json"}
                      :request bb-req})
-          wrapped (wrap-request-handler handler)
+          wrapped (wrap handler)
           result (wrapped {:method :get :url "https://api.ehr.com/Patient"})]
       (is (= 401 (:status result)))
       (is (= "{\"error\": \"unauthorized\"}" (:body result)))
@@ -137,7 +138,7 @@
                      :body "{\"issue\": \"not found\"}"
                      :headers {"content-type" "application/json"}
                      :request bb-req})
-          wrapped (wrap-request-handler handler)
+          wrapped (wrap handler)
           result (wrapped {:method :get
                            :url "https://api.ehr.com/Patient"
                            :expected-status [404]})]
@@ -148,7 +149,7 @@
   (testing "Hard JVM network exception is unified under :http/failure (Flat map version)"
     (let [handler (fn [_]
                     (throw (java.net.ConnectException. "Connection refused")))
-          wrapped (wrap-request-handler handler)]
+          wrapped (wrap handler)]
       (try
         (wrapped {:method :get :url "https://api.ehr.com/Patient"})
         (is false "Should have thrown an exception")

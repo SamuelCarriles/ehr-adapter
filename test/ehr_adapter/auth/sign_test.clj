@@ -103,3 +103,60 @@
               (is (= :client-assertion (:operation data)))
               (is (= :unsupported/legacy-auth (get-in data [:details :assertion-type])))
               (is (= [:smart-on-fhir/backend-services] (get-in data [:details :expected]))))))))))
+
+(deftest get-jwk-test
+  (let [jwks {:keys [{:kty "RSA" :kid "key-1" :n "abc" :e "AQAB" :d "xyz"}
+                     {:kty "RSA" :kid "key-2" :n "def" :e "AQAB" :d "uvw"}
+                     {:kty "RSA" :kid "key-3" :n "ghi" :e "AQAB" :d "rst"}]}]
+
+    (testing "Extracts the correct JWK by kid from a JWKS"
+      (let [jwk (@#'sign/get-jwk "key-2" jwks)]
+        (is (= "key-2" (:kid jwk)))
+        (is (= "def" (:n jwk)))))
+
+    (testing "Extracts the first key when kid matches"
+      (let [jwk (@#'sign/get-jwk "key-1" jwks)]
+        (is (= "key-1" (:kid jwk)))
+        (is (= "abc" (:n jwk)))))
+
+    (testing "Extracts the last key when kid matches"
+      (let [jwk (@#'sign/get-jwk "key-3" jwks)]
+        (is (= "key-3" (:kid jwk)))
+        (is (= "ghi" (:n jwk)))))
+
+    (testing "Throws :invalid/key-id when kid is not found in JWKS"
+      (try
+        (@#'sign/get-jwk "non-existent-key" jwks)
+        (is false "Should have thrown an exception")
+        (catch clojure.lang.ExceptionInfo e
+          (let [data (ex-data e)]
+            (is (= :invalid/key-id (:code data)))
+            (is (= :ehr-adapter.auth.sign (:scope data)))
+            (is (= :resolve-private-key (:operation data)))
+            (is (= "non-existent-key" (get-in data [:details :key-id])))
+            (is (= ["key-1" "key-2" "key-3"] (get-in data [:details :expected])))))))))
+
+(deftest client-assertion-with-jwks-test
+  (let [keypair (generate-test-keypair)
+        private-key (.getPrivate keypair)
+        public-key (.getPublic keypair)
+        jwk (bk/jwk private-key public-key)
+        jwks {:keys [(assoc jwk :kid "key-jwks-1")
+                     (assoc jwk :kid "key-jwks-2")]}
+
+        strategy {:type :smart-on-fhir/backend-services
+                  :client-id "ehr-connector-app"
+                  :audience "https://ehr.hospital.org/oauth2/token"
+                  :algorithm :rs256
+                  :key-id "key-jwks-2"
+                  :private-key-set jwks}]
+
+    (testing "Full JWT generation using :private-key-set (JWKS) instead of :private-key"
+      (let [jwt-token (sign/client-assertion strategy)]
+        (is (string? jwt-token))
+        (let [decoded-claims (jwt/unsign jwt-token public-key {:alg :rs256})]
+          (is (= "ehr-connector-app" (:iss decoded-claims)))
+          (is (= "ehr-connector-app" (:sub decoded-claims)))
+          (is (= "https://ehr.hospital.org/oauth2/token" (:aud decoded-claims)))
+          (is (integer? (:exp decoded-claims)))
+          (is (string? (:jti decoded-claims))))))))
