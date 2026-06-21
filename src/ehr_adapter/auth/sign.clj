@@ -66,5 +66,6 @@
                 :exp (+ (now) 300)
                 :jti (str (random-uuid))}
         opts {:alg algorithm
-              :header {:kid key-id}}]
+              :header {:kid key-id
+                       :typ "JWT"}}]
     (jwt/sign claims private-key-obj opts)))
