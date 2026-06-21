@@ -3,7 +3,7 @@
 
 (def lib  'io.github.samuelcarriles/ehr-adapter)
 
-(def version "2.0.0")
+(def version "2.0.1")
 
 (def class-dir "target/classes")
 
