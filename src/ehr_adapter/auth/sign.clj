@@ -5,6 +5,18 @@
    [ehr-adapter.error :as error]
    [ehr-adapter.time :refer [now]]))
 
+(defn- get-jwk
+  [kid jwks]
+  (let [jwk-coll (:keys jwks)]
+    (if-let [jwk (some #(when (= kid (:kid %)) %) jwk-coll)]
+      jwk
+      (throw (error/info :invalid/key-id
+                         {:message (format "The given JWKS doesn't contain a JWK with kid: %s" kid)
+                          :scope :ehr-adapter.auth.sign
+                          :value kid
+                          :operation :resolve-private-key
+                          :expected (into [] (keep :kid (:keys jwks)))})))))
+
 (defn- coerce-private-key
   "Coerces a private key configuration into a java.security.PrivateKey instance.
 
@@ -45,8 +57,9 @@
                       :expected [:smart-on-fhir/backend-services]})))
 
 (defmethod client-assertion  :smart-on-fhir/backend-services
-  [{:keys [client-id audience algorithm key-id private-key]}]
-  (let [private-key-obj (coerce-private-key private-key)
+  [{:keys [client-id audience algorithm key-id private-key private-key-set]}]
+  (let [pk (or private-key (get-jwk key-id private-key-set))
+        private-key-obj (coerce-private-key pk)
         claims {:iss client-id
                 :sub client-id
                 :aud audience

@@ -56,6 +56,15 @@
             :code code
             :details  {:private-key private-key}}))
 
+(defmethod info :invalid/key-id
+  [code {:keys [scope operation message value expected]}]
+  (ex-info message
+           {:scope scope
+            :operation operation
+            :code code
+            :details {:key-id value
+                      :expected expected}}))
+
 (defmethod info :unsupported/mime-code
   [code {:keys [scope operation message mime-code expected]}]
   (ex-info message
