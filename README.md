@@ -94,6 +94,6 @@ To understand the exact structure of the configuration map, the data types suppo
 
 ## License
 
-Copyright © 2024 Samuel Carriles
+Copyright © 2026 Samuel Carriles
 
 Distributed under the MIT License.
