@@ -116,3 +116,64 @@
       (is (= {:status "success"
               :message "Operation executed successfully"}
              (:body result))))))
+
+(deftest core-integration-auth-flag-test
+  (testing "Operation with :auth? false should bypass authentication even when auth is configured"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+
+          config {:domain :test/mixed-auth
+                  :base-url "https://api.test.com/v1"
+                  :middlewares [mock-middleware]
+                  :network-config {:request-handler mock-handler}
+                  :auth {:initial [{:type :oauth2
+                                    :token-url "https://auth.test.com/oauth/token"
+                                    :grant-type "client_credentials"
+                                    :client-id "client-123"
+                                    :client-secret "secret-456"}
+                                   {:type :normalize
+                                    :token [:body :access_token]
+                                    :token-type [:body :token_type]
+                                    :expires-in [:body :expires_in]}]}
+                  :operations [{:name :get-metadata
+                                :path "metadata"
+                                :method :get
+                                :auth? false}
+                               {:name :get-patient
+                                :path "Patient/123"
+                                :method :get}]}
+
+          instance (core/initialize config)]
+
+      ;; Clear the log after initialization (which triggers initial auth)
+      (reset! call-log [])
+
+      ;; Invoke the operation with :auth? false
+      (let [result (core/invoke instance :get-metadata)]
+        ;; Should only make 1 HTTP call (no auth)
+        (is (= 1 (count @call-log)) "Should make exactly 1 HTTP call (no auth)")
+
+        ;; Verify the API request structure
+        (let [api-req (first @call-log)]
+          (is (= "https://api.test.com/v1/metadata" (:url api-req)))
+          (is (= :get (:method api-req)))
+          ;; Verify NO Authorization header was injected
+          (is (nil? (get-in api-req [:headers "Authorization"]))))
+
+        ;; The final result is the standard success response
+        (is (= {:status "success"
+                :message "Operation executed successfully"}
+               (:body result))))
+
+      ;; Clear the log and invoke the operation with default :auth? (true)
+      (reset! call-log [])
+      (core/invoke instance :get-patient)
+;; Should make 1 HTTP call (token already cached from initialize)      
+      (is (= 1 (count @call-log)) "Should make exactly 1 HTTP call (token already cached)")
+
+;; Verify the API Request
+      (let [api-req (first @call-log)]
+        (is (= "https://api.test.com/v1/Patient/123" (:url api-req)))
+        (is (= :get (:method api-req)))
+          ;; Verify the token was correctly injected
+        (is (= "Bearer integration-test-token-xyz" (get-in api-req [:headers "Authorization"])))))))

@@ -88,23 +88,6 @@
 
 ;: =================================================================
 ;; JWK 
-(def PublicJWK
-  [:map
-   [:kty [:fn {:error/message "The field \"kty\" in the JWK must be a non-blank string"} not-blank-str?]]
-   [:alg [:fn {:error/message "The field \"alg\" in the JWK must be a non-blank string"} not-blank-str?]]
-   [:n [:fn {:error/message "The field \"n\" in the JWK must be a non-blank string"} not-blank-str?]]
-   [:e [:fn {:error/message "The field \"e\" in the JWK must be a non-blank string"} not-blank-str?]]])
-
-(def PrivateJWK
-  (mu/merge
-   PublicJWK
-   [:map
-    [:d [:fn {:error/message "The field \"d\" in the JWK must be a non-blank string"} not-blank-str?]]
-    [:p {:optional true} [:fn {:error/message "The field \"p\" in the JWK must be a non-blank string"} not-blank-str?]]
-    [:q {:optional true} [:fn {:error/message "The field \"q\" in the JWK must be a non-blank string"} not-blank-str?]]
-    [:dp {:optional true} [:fn {:error/message "The field \"dp\" in the JWK must be a non-blank string"} not-blank-str?]]
-    [:dq {:optional true} [:fn {:error/message "The field \"dq\" in the JWK must be a non-blank string"} not-blank-str?]]
-    [:qi {:optional true} [:fn {:error/message "The field \"qi\" in the JWK must be a non-blank string"} not-blank-str?]]]))
 
 (def JWK
   [:map
@@ -206,6 +189,7 @@
            [:vector
             [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]]]]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
+   [:auth? {:optional true} :boolean]
    [:request {:optional true} HttpRequestOperation]
    [:description {:optional true} [:fn {:error/message "operation-description must be a non-blank string"} not-blank-str?]]])
 

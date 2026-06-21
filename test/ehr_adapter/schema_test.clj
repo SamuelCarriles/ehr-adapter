@@ -250,6 +250,28 @@
                                                               :n "abc..."
                                                               :e "AQAB"
                                                               :d "xyz..."}]}}]}}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "13. Operations with explicit :auth? flag (true and false)"
+    (let [config {:domain :eclinicalworks/tenant-auth-flag
+                  :base-url "https://api.eclinicalworks.com/v2"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :get-metadata
+                                :method :get
+                                :path "metadata"
+                                :auth? false
+                                :description "Public endpoint without auth"}
+                               {:name :get-patient
+                                :method :get
+                                :path "Patient/123"
+                                :auth? true
+                                :description "Protected endpoint with auth"}
+                               {:name :get-observation
+                                :method :get
+                                :path "Observation/456"
+                                :description "Endpoint without explicit auth? (should default to true)"}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -495,7 +517,22 @@
         (is false "Expected ExceptionInfo due to map structure in normalize layer")
         (catch clojure.lang.ExceptionInfo ex
           (let [errors (get-in (ex-data ex) [:details :auth :initial 0])]
-            (is (some? (:token errors)))))))))
+            (is (some? (:token errors))))))))
+
+  (testing "Operation configuration: Reject non-boolean values for :auth?"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com/v1"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :get-patient
+                                :method :get
+                                :path "Patient/123"
+                                :auth? "yes"}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
 ;; AdapterInstance Tests

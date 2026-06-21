@@ -90,3 +90,45 @@
         (is (= "active" (get-in result [:query-params :status])))
 
         (is (not (contains? (:query-params result) :empty-param)))))))
+
+(deftest test-compile-auth-flag
+  (testing "When :auth? is not specified, it defaults to true"
+    (let [op-spec {:name :get-patient
+                   :method :get
+                   :path "Patient/123"}
+          compiled (op/compile op-spec)]
+      (is (= true (get-in compiled [:get-patient :auth?])))))
+
+  (testing "When :auth? is explicitly true, it is preserved"
+    (let [op-spec {:name :get-patient
+                   :method :get
+                   :path "Patient/123"
+                   :auth? true}
+          compiled (op/compile op-spec)]
+      (is (= true (get-in compiled [:get-patient :auth?])))))
+
+  (testing "When :auth? is explicitly false, it is preserved"
+    (let [op-spec {:name :get-metadata
+                   :method :get
+                   :path "metadata"
+                   :auth? false}
+          compiled (op/compile op-spec)]
+      (is (= false (get-in compiled [:get-metadata :auth?])))))
+
+  (testing "Multiple operations with mixed :auth? values"
+    (let [op-specs [{:name :get-metadata
+                     :method :get
+                     :path "metadata"
+                     :auth? false}
+                    {:name :get-patient
+                     :method :get
+                     :path "Patient/123"}
+                    {:name :create-patient
+                     :method :post
+                     :path "Patient"
+                     :auth? true}]
+          compiled (map op/compile op-specs)
+          merged (apply merge compiled)]
+      (is (= false (get-in merged [:get-metadata :auth?])))
+      (is (= true (get-in merged [:get-patient :auth?])))
+      (is (= true (get-in merged [:create-patient :auth?]))))))

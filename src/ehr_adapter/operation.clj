@@ -78,7 +78,7 @@
    optional referent keys needed for execution.
    
    The compiled function expects a runtime context map and a request handler."
-  [{:keys [path method request description] :as op}]
+  [{:keys [path method auth? request description] :as op :or {auth? true}}]
   (letfn [(operation [ctx req-handler]
             (let [full-url (->> path
                                 (full-url ctx)
@@ -98,7 +98,7 @@
                    req-handler)))]
     (let [op-name (:name op)
           ref-keys (clasify-ref-keys (ref/extract op))
-          op-map (cond-> (merge {:handler operation} ref-keys)
+          op-map (cond-> (merge {:handler operation :auth? auth?} ref-keys)
                    description
                    (assoc :description description))]
       {op-name op-map})))

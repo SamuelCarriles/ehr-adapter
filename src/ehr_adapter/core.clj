@@ -71,8 +71,8 @@
 
    Returns:
    The enriched context map ready to be passed to the operation handler."
-  [adapter-instance ctx]
-  (let [auth-data (auth-core/ensure-token! (:ehr-adapter/auth adapter-instance) 60)
+  [adapter-instance ctx auth?]
+  (let [auth-data (when auth? (auth-core/ensure-token! (:ehr-adapter/auth adapter-instance) 60))
         base-url (:ehr-adapter/base-url adapter-instance)]
 
     (cond-> (assoc ctx  :ehr-adapter/base-url base-url)
@@ -100,11 +100,12 @@
   ([adapter-instance operation-key] (invoke adapter-instance operation-key {}))
   ([adapter-instance operation-key ctx]
 
-   (let [operation (get-in adapter-instance [:ehr-adapter/operations operation-key :handler])
+   (let [operation-data (get-in adapter-instance [:ehr-adapter/operations operation-key])
+         {:keys [handler auth?]} operation-data
          req-handler (:ehr-adapter/request-handler adapter-instance)
-         ready-ctx (runtime-context adapter-instance ctx)]
-     (if (some? operation)
-       (operation ready-ctx req-handler)
+         ready-ctx (runtime-context adapter-instance ctx auth?)]
+     (if (some? handler)
+       (handler ready-ctx req-handler)
 
        (throw (error/info :unsupported/invoked-operation
                           {:message (format "Unknown operation %s" operation-key)
