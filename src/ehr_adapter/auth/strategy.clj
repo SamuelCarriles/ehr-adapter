@@ -105,8 +105,15 @@
                                  (merge new-form-params))
                   :content-type :form-url-encoded}
         request (merge req-opts base-req)]
+    (println "DEBUG - Request to token endpoint:")
+    (println "URL:" token-url)
+    (println "Form params:" (:form-params request))
+    (println "Content-Type header:" (:content-type request))
+    (println "Headers:" (:headers request))
     (request-handler request)))
 
 (defmethod execute :smart-on-fhir/backend-services
   [layer request-handler]
   (smart-on-fhir-backend-services layer request-handler))
+
+;; TODO: Hay que revisar la request que se está construyendo porque no es correcta
