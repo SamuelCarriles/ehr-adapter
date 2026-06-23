@@ -20,7 +20,7 @@
   :deploy {:extra-deps {slipset/deps-deploy {:mvn/version "0.2.5"}}
            :exec-fn deps-deploy.deps-deploy/deploy
            :exec-args {:installer :remote
-                       :artifact "target/ehr-adapter-2.0.1.jar"
+                       :artifact "target/ehr-adapter-2.1.0.jar"
                        :pom-file "target/classes/META-INF/maven/io.github.samuelcarriles/ehr-adapter/pom.xml"}}}
 
  :license {:name "MIT License"
