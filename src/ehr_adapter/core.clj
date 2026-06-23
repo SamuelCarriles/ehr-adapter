@@ -36,7 +36,8 @@
          request-handler (:request-handler network-config)
          wrapped-handler (-> request-handler
                              (wrap-handler middlewares)
-                             (net/with-retries network-config))
+                             (net/with-retries network-config)
+                             (net/with-client (:client network-config)))
 
          auth-initial-layers (:initial auth)
 
