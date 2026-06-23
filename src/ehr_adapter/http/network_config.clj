@@ -23,6 +23,15 @@
 
     base-delay-ms))
 
+(defn with-client
+  "Wraps a handler with a specific http-client"
+  [handler client]
+  (fn [req]
+    (let [full-req (cond-> req
+                     (some? client)
+                     (assoc :client client))]
+      (handler full-req))))
+
 (defn with-retries
   "Wraps a handler with a synchronous retry policy."
   [handler {:keys [retries retry-on retry-delay-ms before-retry retry-strategy]}]

@@ -177,3 +177,50 @@
         (is (= :get (:method api-req)))
           ;; Verify the token was correctly injected
         (is (= "Bearer integration-test-token-xyz" (get-in api-req [:headers "Authorization"])))))))
+
+(deftest core-integration-client-injection-test
+  (testing "Network config :client is injected into every request"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+          custom-client :my-custom-http-client
+
+          config {:domain :test/client-injection
+                  :base-url "https://api.test.com/v1"
+                  :middlewares [mock-middleware]
+                  :network-config {:request-handler mock-handler
+                                   :client custom-client}
+                  :operations [{:name :get-status
+                                :path "status"
+                                :method :get}]}
+
+          instance (core/initialize config)
+          result (core/invoke instance :get-status)]
+
+      (is (= 1 (count @call-log)))
+      (let [api-req (first @call-log)]
+        (is (= custom-client (:client api-req))
+            "Request should have :client from network-config"))
+
+      (is (= {:status "success"
+              :message "Operation executed successfully"}
+             (:body result)))))
+
+  (testing "When :client is not specified, it is not injected into requests"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+
+          config {:domain :test/no-client
+                  :base-url "https://api.test.com/v1"
+                  :middlewares [mock-middleware]
+                  :network-config {:request-handler mock-handler}
+                  :operations [{:name :get-status
+                                :path "status"
+                                :method :get}]}
+
+          instance (core/initialize config)]
+      (core/invoke instance :get-status)
+
+      (is (= 1 (count @call-log)))
+      (let [api-req (first @call-log)]
+        (is (nil? (:client api-req))
+            "Request should not have :client when not configured")))))
