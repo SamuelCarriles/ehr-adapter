@@ -133,8 +133,13 @@
    [:scopes {:optional true} [:vector [:fn {:error/message "each scope must be a non-blank string"} not-blank-str?]]]])
 
 (def CustomAuth
-  [:map
-   [:handler [:fn {:error/message "custom-auth-handler should be a Clojure function"} fn?]]])
+  [:and
+   [:fn {:error/message "You must provide at least one of :handler or :options"}
+    (fn [{:keys [handler options]}]
+      (or (some? handler) (some? options)))]
+   [:map
+    [:handler {:optional true} [:fn {:error/message "custom-auth-handler should be a Clojure function"} fn?]]
+    [:options {:optional true} :any]]])
 
 (def ExtractionPath
   [:or :keyword :string [:vector [:or :string :keyword :int]]])

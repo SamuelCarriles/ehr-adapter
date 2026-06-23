@@ -103,6 +103,25 @@
                                     :options {:request {:query-params {:sandbox true}}}}]}}]
       (is (= config (schema/validate-adapter-config config)))))
 
+  (testing "3a. Custom auth layer with only :handler (no :options)"
+    (let [config {:domain :epic/hospital-central-prod
+                  :base-url "https://epic.hospital.org/api"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :custom
+                                    :handler mock-custom-auth-handler}]}}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "3b. Custom auth layer with only :options (no :handler)"
+    (let [config {:domain :epic/hospital-central-prod
+                  :base-url "https://epic.hospital.org/api"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :custom
+                                    :options {:token "test-token"
+                                              :token-type "Bearer"}}]}}]
+      (is (= config (schema/validate-adapter-config config)))))
+
   (testing "4. OAuth2 configuration with a valid and complex declarative :normalize map (Sugar + ExtractionPath)"
     (let [config {:domain :eclinicalworks/tenant-normalize-valid
                   :base-url "https://api.eclinicalworks.com/v2"
@@ -529,6 +548,17 @@
                                 :method :get
                                 :path "Patient/123"
                                 :auth? "yes"}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "Custom auth layer: Rejects when neither :handler nor :options is provided"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com/v1"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :custom}]}}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
