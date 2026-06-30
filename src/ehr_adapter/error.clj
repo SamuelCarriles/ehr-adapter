@@ -99,6 +99,14 @@
             :code code
             :details {:field field}}))
 
+(defmethod info :missing/file
+  [code {:keys [scope operation message file]}]
+  (ex-info message
+           {:scope scope
+            :operation operation
+            :code code
+            :details {:file-name file}}))
+
 (defmethod info :http/failure
   [code {:keys [scope operation message status error-body expected-status exception]}]
   (ex-info message
@@ -110,4 +118,6 @@
                          error-body      (assoc :error-body error-body)
                          expected-status (assoc :expected-status expected-status)
                          exception       (assoc :exception exception))}))
+
+
 
