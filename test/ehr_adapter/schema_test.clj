@@ -1,5 +1,5 @@
 (ns ehr-adapter.schema-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing are]]
             [ehr-adapter.schema :as schema]
             [clojure.string :as str]))
 
@@ -705,3 +705,41 @@
                              {:kty "RSA"}]}]
         (is (thrown? clojure.lang.ExceptionInfo
                      (schema/validate-jwks bad-jwks)))))))
+
+;; ===============================================================
+;; IO Schemas Tests 
+;; ==============================================================
+
+(deftest export-options-test
+  (testing "valid export options"
+    (are [opts] (is (= opts (schema/validate-export-opts opts)))
+      {:format :edn :dir "adp" :file-name "ecw.t1.edn"}
+      {:format :transit}
+      {:format :edn :dir "adp"}
+      {:format :transit :file-name "adpt-01.json"}))
+  (testing "invalid export options"
+    (are [opts] (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid export options" (schema/validate-export-opts opts)))
+      {:dir "test"}
+      {:format "edn"}
+      {:format :edn :dir "  "}
+      {:format :edn :file-name "  "}
+      {:format :edn :dir 123}
+      {:format :edn :file-name :not-a-string})))
+
+(deftest import-options-test
+  (testing "valid import options"
+    (are [opts] (is (= opts (schema/validate-import-opts opts)))
+      {:format :edn :file (java.io.File. "config.edn")}
+      {:format :transit :file (java.io.File. "target/config.json") :dir "ignored-dir"}
+      {:format :edn :dir "exports" :file-name "tenant.edn"}
+      {:format :transit :file-name "root-config.json"}))
+
+  (testing "invalid import options"
+    (are [opts] (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid import options" (schema/validate-import-opts opts)))
+      {:file (java.io.File. "config.edn")}
+      {:format :edn :dir "exports"}
+      {:format :transit}
+      {:format :edn :file "not-a-file-object"}
+      {:format :edn :file-name "  "}
+      {:format :edn :file (java.io.File. "ok.edn") :dir "   "})))
+

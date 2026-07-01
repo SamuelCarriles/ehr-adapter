@@ -6,7 +6,8 @@
             [buddy.sign.jws :as jws]
             [ehr-adapter.error :as error]
             [ehr-adapter.reference :as ref])
-  (:import [org.apache.commons.validator.routines UrlValidator]))
+  (:import [org.apache.commons.validator.routines UrlValidator]
+           [java.io File]))
 
 (defn absolute-url?
   [^String s]
@@ -236,6 +237,32 @@
    [:ehr-adapter/auth {:optional true} RunTimeAuth]
    [:ehr-adapter/operations {:optional true} [:map-of :keyword CompiledOperation]]])
 
+;;==================================================================
+;; IO 
+
+(defn file?
+  [x]
+  (instance? File x))
+
+(def ExportOptions
+  [:map
+   [:format :keyword]
+   [:dir {:optional true} [:fn {:error/message "dir must be a non-blank string"} not-blank-str?]]
+   [:file-name {:optional true} [:fn {:error/message "file-name must be a non-blank string"} not-blank-str?]]])
+
+(def ImportOptions
+  [:and
+   [:fn {:error/message "if you provide a :dir you must provide a :file-name"}
+    (fn [{:keys [dir file-name file]}]
+      (cond
+        file true
+        (and dir file-name) true
+        file-name true
+        :else false))]
+   (mu/merge ExportOptions
+             [:map
+              [:file {:optional true} [:fn {:error/message "file must be an instance of java.io/File"} file?]]])])
+
 ;; =================================================================
 ;; Validators
 
@@ -271,3 +298,11 @@
 (defn validate-jwks
   [jwks]
   (validate-schema JWKS jwks "Invalid JWKS"))
+
+(defn validate-export-opts
+  [opts]
+  (validate-schema ExportOptions opts "Invalid export options"))
+
+(defn validate-import-opts
+  [opts]
+  (validate-schema ImportOptions opts "Invalid import options"))
