@@ -16,13 +16,13 @@ A Clojure library for declarative, data-driven EHR integrations.
 Add the following dependency to your `deps.edn`:
 
 ```clojure
-io.github.samuelcarriles/ehr-adapter {:mvn/version "2.2.0"}
+io.github.samuelcarriles/ehr-adapter {:mvn/version "2.3.0"}
 ```
 
 Or to your `project.clj`:
 
 ```clojure
-[io.github.samuelcarriles/ehr-adapter "2.2.0"]
+[io.github.samuelcarriles/ehr-adapter "2.3.0"]
 ```
 
 ## Core Concepts
