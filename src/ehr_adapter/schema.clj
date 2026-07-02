@@ -72,7 +72,8 @@
    [:query-params {:optional true} [:map-of :any :any]]
    [:timeout-ms {:optional true} [:int {:min 1}]]
    [:content-type {:optional true} [:or :keyword MimeCodeMap]]
-   [:accept {:optional true} [:or :keyword MimeCodeMap]]])
+   [:accept {:optional true} [:or :keyword MimeCodeMap]]
+   [:as {:optional true} :keyword]])
 
 (def HttpRequestOption
   (-> HttpRequest

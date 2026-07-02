@@ -657,7 +657,25 @@
                :url "https://api.example.com/v1/Group"
                :headers {:Authorization "Bearer xyz"
                          "X-Int-Header" 42}}]
+      (is (= req (schema/validate-http-request req)))))
+
+  (testing "6. Request with :as keyword for response parsing"
+    (let [req {:method :post
+               :url "https://api.example.com/v1/token"
+               :form-params {"grant_type" "client_credentials"}
+               :content-type :form-url-encoded
+               :as :json}]
       (is (= req (schema/validate-http-request req))))))
+
+(deftest invalid-http-request-test
+  (testing "Fails when :as is not a keyword"
+    (are [req] (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                     #"Invalid HTTP Request map"
+                                     (schema/validate-http-request req)))
+      {:method :get :url "https://api.example.com/v1/Patient" :as "json"}
+      {:method :get :url "https://api.example.com/v1/Patient" :as nil}
+      {:method :get :url "https://api.example.com/v1/Patient" :as 123}
+      {:method :get :url "https://api.example.com/v1/Patient" :as :json :extra-key "not-allowed"})))
 
 ;; =============================================================================
 ;; JWK Schemas Tests
