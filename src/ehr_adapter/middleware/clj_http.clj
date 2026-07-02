@@ -47,7 +47,8 @@
                      (handler clj-http-req)
                      (catch Exception e
                        (throw (error/info :http/failure
-                                          {:message (.getMessage e)
+                                          {:message (or (.getMessage e)
+                                                        (format "HTTP request failed: %s" (type e)))
                                            :scope :ehr-adapter.middleware.clj-http
                                            :operation :http-request
                                            :exception e}))))]
