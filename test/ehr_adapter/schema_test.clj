@@ -291,6 +291,202 @@
                                 :method :get
                                 :path "Observation/456"
                                 :description "Endpoint without explicit auth? (should default to true)"}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "14. Operation without :path (pegs directly to base-url)"
+    (let [config {:domain :advancedmd/no-path-tenant
+                  :base-url "https://providerapi.advancedmd.com/fhir-bulk/status"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :check/status :method :get}
+                               {:name :delete/status :method :delete}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "15. Operation missing mandatory :name"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:method :get}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "16. OperationGroup with realistic FHIR Patient CRUD operations"
+    (let [config {:domain :epic/hospital-prod
+                  :base-url "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:prefix "Patient"
+                                :operations [{:name :search-patient
+                                              :method :get
+                                              :request {:query-params {"name" :ref/name
+                                                                       "birthdate" :ref?/birthdate}}}
+                                             {:name :read-patient
+                                              :method :get
+                                              :path [:ref/patient-id]}
+                                             {:name :create-patient
+                                              :method :post
+                                              :request {:content-type :json
+                                                        :body :ref/patient-data}}
+                                             {:name :update-patient
+                                              :method :put
+                                              :path [:ref/patient-id]
+                                              :request {:content-type :json
+                                                        :body :ref/patient-data}}
+                                             {:name :delete-patient
+                                              :method :delete
+                                              :path [:ref/patient-id]}]}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "17. Nested OperationGroups with FHIR hierarchy"
+    (let [config {:domain :cerner/hospital-dev
+                  :base-url "https://fhir.cerner.com/r4/ec246c2b"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :oauth2
+                                    :token-url "https://authorization.cerner.com/tenants/ec246c2b/protocols/oauth2/tokens"
+                                    :grant-type "client_credentials"
+                                    :client-id "client-id"
+                                    :client-secret "secret"}]}
+                  :operations [{:name :metadata
+                                :method :get
+                                :path "metadata"}
+                               {:prefix "r4"
+                                :operations [{:name :capabilities
+                                              :method :get
+                                              :path "metadata"}
+                                             {:prefix "Patient"
+                                              :operations [{:name :search-patient
+                                                            :method :get
+                                                            :request {:query-params {"name" :ref?/name
+                                                                                     "identifier" :ref?/identifier}}}
+                                                           {:name :read-patient
+                                                            :method :get
+                                                            :path [:ref/patient-id]}]}
+                                             {:prefix "Observation"
+                                              :operations [{:name :search-observation
+                                                            :method :get
+                                                            :request {:query-params {"patient" :ref/patient-id
+                                                                                     "code" :ref?/code}}}
+                                                           {:name :read-observation
+                                                            :method :get
+                                                            :path [:ref/observation-id]}]}]}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "17. Multiple OperationGroups with REST API structure"
+    (let [config {:domain :eclinicalworks/tenant-prod
+                  :base-url "https://api.eclinicalworks.com/v2"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:prefix "api/patients"
+                                :operations [{:name :list-patients
+                                              :method :get
+                                              :request {:query-params {"page" :ref?/page
+                                                                       "limit" :ref?/limit}}}
+                                             {:name :get-patient
+                                              :method :get
+                                              :path [:ref/patient-id]}
+                                             {:name :create-patient
+                                              :method :post
+                                              :request {:content-type :json
+                                                        :body :ref/patient-data}}
+                                             {:name :update-patient
+                                              :method :patch
+                                              :path [:ref/patient-id]
+                                              :request {:content-type :json
+                                                        :body :ref/patient-updates}}]}
+                               {:prefix "api/appointments"
+                                :operations [{:name :list-appointments
+                                              :method :get
+                                              :request {:query-params {"patient_id" :ref/patient-id
+                                                                       "date_from" :ref?/date-from}}}
+                                             {:name :get-appointment
+                                              :method :get
+                                              :path [:ref/appointment-id]}
+                                             {:name :create-appointment
+                                              :method :post
+                                              :request {:content-type :json
+                                                        :body :ref/appointment-data}}
+                                             {:name :cancel-appointment
+                                              :method :delete
+                                              :path [:ref/appointment-id]}]}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "18. Nested OperationGroups with 2-level hierarchy"
+    (let [config {:domain :epic/hospital-enterprise
+                  :base-url "https://fhir.epic.com/interconnect-fhir-oauth/api"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :smart-on-fhir/backend-services
+                                    :client-id "epic-client-123"
+                                    :key-id "key-prod-1"
+                                    :algorithm :rs384
+                                    :scopes ["system/Patient.read" "system/Observation.read"]
+                                    :audience "https://fhir.epic.com"
+                                    :token-url "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
+                                    :private-key "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwgg..."}]}
+                  :operations [{:name :api-state
+                                :method :get
+                                :path "state"}
+                               {:prefix "FHIR/R4"
+                                :operations [{:name :capabilities
+                                              :method :get
+                                              :path "metadata"}
+                                             {:prefix "Patient"
+                                              :operations [{:name :search-patient
+                                                            :method :get
+                                                            :request {:query-params {"name" :ref?/name
+                                                                                     "birthdate" :ref?/birthdate
+                                                                                     "identifier" :ref?/identifier}}}
+                                                           {:name :read-patient
+                                                            :method :get
+                                                            :path [:ref/patient-id]}
+                                                           {:name :create-patient
+                                                            :method :post
+                                                            :request {:content-type :json
+                                                                      :body :ref/patient-data}}
+                                                           {:name :update-patient
+                                                            :method :put
+                                                            :path [:ref/patient-id]
+                                                            :request {:content-type :json
+                                                                      :body :ref/patient-data}}
+                                                           {:name :delete-patient
+                                                            :method :delete
+                                                            :path [:ref/patient-id]}]}
+                                             {:prefix "Observation"
+                                              :operations [{:name :search-observation
+                                                            :method :get
+                                                            :request {:query-params {"patient" :ref/patient-id
+                                                                                     "code" :ref?/code
+                                                                                     "date" :ref?/date}}}
+                                                           {:name :read-observation
+                                                            :method :get
+                                                            :path [:ref/observation-id]}
+                                                           {:name :create-observation
+                                                            :method :post
+                                                            :request {:content-type :json
+                                                                      :body :ref/observation-data}}]}
+                                             {:prefix "Appointment"
+                                              :operations [{:name :search-appointment
+                                                            :method :get
+                                                            :request {:query-params {"patient" :ref/patient-id
+                                                                                     "date" :ref?/date}}}
+                                                           {:name :read-appointment
+                                                            :method :get
+                                                            :path [:ref/appointment-id]}
+                                                           {:name :create-appointment
+                                                            :method :post
+                                                            :request {:content-type :json
+                                                                      :body :ref/appointment-data}}
+                                                           {:name :cancel-appointment
+                                                            :method :delete
+                                                            :path [:ref/appointment-id]}]}]}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -559,6 +755,50 @@
                   :network-config {:request-handler mock-http-request-handler}
                   :middlewares [mock-translation-middleware]
                   :auth {:initial [{:type :custom}]}}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "Fails when operation names are duplicated across different groups"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:prefix "v1/Patient"
+                                :operations [{:name :get-patient
+                                              :method :get
+                                              :path [:ref/patient-id]}
+                                             {:name :create-patient
+                                              :method :post
+                                              :request {:content-type :json}}]}
+                               {:prefix "v2/Patient"
+                                :operations [{:name :get-patient
+                                              :method :get
+                                              :path [:ref/patient-id]}
+                                             {:name :update-patient
+                                              :method :put
+                                              :path [:ref/patient-id]
+                                              :request {:content-type :json}}]}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "Fails when operation name conflicts between root operation and group"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :get-patient
+                                :method :get
+                                :path "Patient/123"}
+                               {:prefix "v1/Patient"
+                                :operations [{:name :get-patient
+                                              :method :get
+                                              :path [:ref/patient-id]}]}]}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
