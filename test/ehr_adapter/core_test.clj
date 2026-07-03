@@ -82,7 +82,21 @@
       ;; The final result is the standard success response from the API
       (is (= {:status "success"
               :message "Operation executed successfully"}
-             (:body result))))))
+             (:body result)))))
+  (testing "Initialize with OperationGroups"
+    (let [config {:domain :test/groups
+                  :base-url "https://api.test.com"
+                  :network-config {:request-handler (make-mock-http-handler nil)}
+                  :middlewares [mock-middleware]
+                  :operations [{:prefix "v1/Patient"
+                                :operations [{:name :search-patient
+                                              :method :get}
+                                             {:name :read-patient
+                                              :method :get
+                                              :path [:ref/patient-id]}]}]}]
+      (is (map? (core/initialize config)))
+      (is (contains? (get-in (core/initialize config) [:ehr-adapter/operations]) :search-patient))
+      (is (contains? (get-in (core/initialize config) [:ehr-adapter/operations]) :read-patient)))))
 
 (deftest core-integration-no-auth-flow-test
   (testing "Flow without authentication: bypasses token logic, resolves dynamic refs, preserves user headers"

@@ -54,7 +54,9 @@
                                               :refresh-fn (auth-core/refresh auth-refresh-layer wrapped-handler)})
 
                     operations
-                    (assoc :ehr-adapter/operations (apply merge (map op/compile operations))))]
+                    (assoc :ehr-adapter/operations (->> (op/flatten-operations operations)
+                                                        (map op/compile)
+                                                        (apply merge))))]
 
      (schema/validate-adapter-instance instance))))
 

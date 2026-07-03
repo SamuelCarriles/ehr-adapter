@@ -207,7 +207,7 @@
 (def OperationPath
   [:or
    [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]
-   [:vector
+   [:vector {:min 1}
     [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]]])
 
 (def Operation

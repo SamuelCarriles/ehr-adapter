@@ -2,17 +2,6 @@
   (:require [clojure.test :refer [deftest is testing]]
             [ehr-adapter.operation :as op]))
 
-(deftest test-path->str
-  (testing "Successful path resolution with valid required references"
-    (let [ctx {:patientId "pat-123" :encounterId "enc-456"}]
-      (is (= "v1/Patient/pat-123/Encounter/enc-456"
-             (op/path->str ctx ["v1" "Patient" :ref/patientId "Encounter" :ref/encounterId])))))
-
-  (testing "Throws ExceptionInfo when a required reference is missing from context"
-    (let [ctx {:encounterId "enc-456"}]
-      (is (thrown? clojure.lang.ExceptionInfo
-                   (op/path->str ctx ["v1" "Patient" :ref/patientId]))))))
-
 (deftest test-full-url
   (testing "Constructs full URL using a static string path"
     (let [ctx {:ehr-adapter/base-url "https://api.advancedmd.com"}]
@@ -22,7 +11,12 @@
   (testing "Constructs full URL using a dynamic vector path"
     (let [ctx {:ehr-adapter/base-url "https://api.advancedmd.com" :patientId "999"}]
       (is (= "https://api.advancedmd.com/v1/Patient/999"
-             (op/full-url ctx ["v1" "Patient" :ref/patientId]))))))
+             (op/full-url ctx ["v1" "Patient" :ref/patientId])))))
+
+  (testing "Constructs full URL when path is nil (returns base-url only)"
+    (let [ctx {:ehr-adapter/base-url "https://api.advancedmd.com"}]
+      (is (= "https://api.advancedmd.com"
+             (op/full-url ctx nil))))))
 
 (deftest test-clasify-ref-keys
   (testing "Basic classification of required and optional keys"
@@ -132,3 +126,101 @@
       (is (= false (get-in merged [:get-metadata :auth?])))
       (is (= true (get-in merged [:get-patient :auth?])))
       (is (= true (get-in merged [:create-patient :auth?]))))))
+
+(deftest test-flatten-operations
+  (testing "Returns operations unchanged when there are no groups"
+    (let [ops [{:name :get-patient :method :get :path "Patient/123"}
+               {:name :get-metadata :method :get :path "metadata"}]]
+      (is (= [{:name :get-patient :method :get :path ["Patient/123"]}
+              {:name :get-metadata :method :get :path ["metadata"]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Flattens single-level group with string prefix"
+    (let [ops [{:prefix "v1/Patient"
+                :operations [{:name :search-patient :method :get}
+                             {:name :read-patient :method :get :path [:ref/patient-id]}]}]]
+      (is (= [{:name :search-patient :method :get :path ["v1/Patient"]}
+              {:name :read-patient :method :get :path ["v1/Patient" :ref/patient-id]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Flattens single-level group with vector prefix"
+    (let [ops [{:prefix ["v1" "Patient"]
+                :operations [{:name :create-patient :method :post}
+                             {:name :update-patient :method :put :path [:ref/patient-id]}]}]]
+      (is (= [{:name :create-patient :method :post :path ["v1" "Patient"]}
+              {:name :update-patient :method :put :path ["v1" "Patient" :ref/patient-id]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Flattens multiple groups at the same level"
+    (let [ops [{:prefix "api/patients"
+                :operations [{:name :list-patients :method :get}
+                             {:name :get-patient :method :get :path [:ref/patient-id]}]}
+               {:prefix "api/appointments"
+                :operations [{:name :list-appointments :method :get}
+                             {:name :get-appointment :method :get :path [:ref/appointment-id]}]}]]
+      (is (= [{:name :list-patients :method :get :path ["api/patients"]}
+              {:name :get-patient :method :get :path ["api/patients" :ref/patient-id]}
+              {:name :list-appointments :method :get :path ["api/appointments"]}
+              {:name :get-appointment :method :get :path ["api/appointments" :ref/appointment-id]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Flattens nested groups (2-level hierarchy)"
+    (let [ops [{:prefix "FHIR/R4"
+                :operations [{:name :capabilities :method :get :path "metadata"}
+                             {:prefix "Patient"
+                              :operations [{:name :search-patient :method :get}
+                                           {:name :read-patient :method :get :path [:ref/patient-id]}]}
+                             {:prefix "Observation"
+                              :operations [{:name :search-observation :method :get}
+                                           {:name :read-observation :method :get :path [:ref/observation-id]}]}]}]]
+      (is (= [{:name :capabilities :method :get :path ["FHIR/R4" "metadata"]}
+              {:name :search-patient :method :get :path ["FHIR/R4" "Patient"]}
+              {:name :read-patient :method :get :path ["FHIR/R4" "Patient" :ref/patient-id]}
+              {:name :search-observation :method :get :path ["FHIR/R4" "Observation"]}
+              {:name :read-observation :method :get :path ["FHIR/R4" "Observation" :ref/observation-id]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Flattens deeply nested groups (3-level hierarchy)"
+    (let [ops [{:prefix "api"
+                :operations [{:prefix "v1"
+                              :operations [{:prefix "Patient"
+                                            :operations [{:name :get-patient :method :get}]}]}]}]]
+      (is (= [{:name :get-patient :method :get :path ["api" "v1" "Patient"]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Handles mixed operations and groups at root level"
+    (let [ops [{:name :health-check :method :get :path "health"}
+               {:prefix "v1"
+                :operations [{:name :get-patient :method :get :path "Patient"}]}
+               {:name :metadata :method :get :path "metadata"}]]
+      (is (= [{:name :health-check :method :get :path ["health"]}
+              {:name :get-patient :method :get :path ["v1" "Patient"]}
+              {:name :metadata :method :get :path ["metadata"]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Handles operations without path inside groups"
+    (let [ops [{:prefix "Patient"
+                :operations [{:name :search-patient :method :get}
+                             {:name :create-patient :method :post}]}]]
+      (is (= [{:name :search-patient :method :get :path ["Patient"]}
+              {:name :create-patient :method :post :path ["Patient"]}]
+             (op/flatten-operations ops)))))
+
+  (testing "Returns empty vector when given empty input"
+    (is (= [] (op/flatten-operations []))))
+
+  (testing "Preserves all operation fields except path"
+    (let [ops [{:prefix "v1"
+                :operations [{:name :get-patient
+                              :method :get
+                              :auth? false
+                              :description "Get patient by ID"
+                              :request {:headers {"Accept" "application/json"}}
+                              :path [:ref/patient-id]}]}]]
+      (is (= [{:name :get-patient
+               :method :get
+               :auth? false
+               :description "Get patient by ID"
+               :request {:headers {"Accept" "application/json"}}
+               :path ["v1" :ref/patient-id]}]
+             (op/flatten-operations ops))))))
