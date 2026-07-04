@@ -55,10 +55,7 @@
    and appending it to the base-url found within the context."
   [ctx path]
   (let [base-url (:ehr-adapter/base-url ctx)
-        path (cond
-               (string? path) [path]
-               (nil? path) []
-               :else path)
+        path (->path path)
         resolved-path (ref/resolve ctx path)]
     (str/join "/" (into [base-url] resolved-path))))
 

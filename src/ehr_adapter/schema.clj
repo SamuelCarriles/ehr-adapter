@@ -1,6 +1,5 @@
 (ns ehr-adapter.schema
   (:require
-   [clojure.walk :refer [postwalk]]
    [malli.core :as m]
    [malli.error :as me]
    [malli.util :as mu]
@@ -192,17 +191,18 @@
 
 ;;=================================================================================
 ;; Operation Schemas
+(defn- collect-names
+  [operations]
+  (mapcat (fn [op]
+            (if (:operations op)
+              (collect-names (:operations op))
+              [(:name op)]))
+          operations))
 
 (defn unique-op-names?
   [operations]
-  (let [names (transient [])]
-    (postwalk
-     (fn [x]
-       (when (and (map? x) (:name x))
-         (conj! names (:name x)))
-       x)
-     operations)
-    (every? #(= 1 (val %)) (frequencies (persistent! names)))))
+  (or (empty? operations)
+      (apply distinct? (collect-names operations))))
 
 (def OperationPath
   [:or

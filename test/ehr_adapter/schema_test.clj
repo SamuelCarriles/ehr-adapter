@@ -378,7 +378,7 @@
                                                             :path [:ref/observation-id]}]}]}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
-  (testing "17. Multiple OperationGroups with REST API structure"
+  (testing "18. Multiple OperationGroups with REST API structure"
     (let [config {:domain :eclinicalworks/tenant-prod
                   :base-url "https://api.eclinicalworks.com/v2"
                   :network-config {:request-handler mock-http-request-handler}
@@ -418,7 +418,7 @@
                                               :path [:ref/appointment-id]}]}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
-  (testing "18. Nested OperationGroups with 2-level hierarchy"
+  (testing "19. Nested OperationGroups with 2-level hierarchy"
     (let [config {:domain :epic/hospital-enterprise
                   :base-url "https://fhir.epic.com/interconnect-fhir-oauth/api"
                   :network-config {:request-handler mock-http-request-handler}
@@ -799,6 +799,30 @@
                                 :operations [{:name :get-patient
                                               :method :get
                                               :path [:ref/patient-id]}]}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "Fails when a group is missing mandatory :prefix"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:operations [{:name :get-patient :method :get}]}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "Fails when a group has an empty :operations vector"
+    (let [config {:domain :eclinicalworks/test-tenant
+                  :base-url "https://api.com"
+                  :network-config {:request-handler mock-http-request-handler}
+                  :middlewares [mock-translation-middleware]
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:prefix "v1/Patient" :operations []}]}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
