@@ -85,30 +85,38 @@
                     ops))]
     (vec (flatter operations []))))
 
+(defn transform
+  [x transformers]
+  (reduce #(%2 %1) x transformers))
+
 (defn compile
   "Compiles an operation map into an executable closure mapped to the 
    operation's name. The resulting map also exposes the required and 
    optional referent keys needed for execution.
    
    The compiled function expects a runtime context map and a request handler."
-  [{:keys [path method auth? request description] :as op :or {auth? true}}]
+  [{:keys [path method auth? request transformers description] :as op :or {auth? true}}]
   (letfn [(operation [ctx req-handler]
-            (let [full-url (->> path
-                                (full-url ctx)
+            (let [{in-trs :in out-trs :out} transformers
+                  full-ctx (transform ctx in-trs)
+                  full-url (->> path
+                                (full-url full-ctx)
                                 schema/validate-url)
 
-                  new-req (:request ctx)
+                  new-req (:request full-ctx)
 
                   req (cond-> {:url full-url :method method}
                         request
                         (merge request)
 
                         new-req
-                        (deep-merge new-req))]
-              (->> req
-                   (ref/resolve ctx)
-                   clean-nil
-                   req-handler)))]
+                        (deep-merge new-req))
+                  result (->> req
+                              (ref/resolve full-ctx)
+                              clean-nil
+                              req-handler)]
+              (transform result out-trs)))]
+
     (let [op-name (:name op)
           ref-keys (clasify-ref-keys (ref/extract op))
           op-map (cond-> (merge {:handler operation :auth? auth?} ref-keys)

@@ -1,6 +1,7 @@
 (ns ehr-adapter.operation-test
   (:require [clojure.test :refer [deftest is testing]]
-            [ehr-adapter.operation :as op]))
+            [ehr-adapter.operation :as op]
+            [clojure.string :as str]))
 
 (deftest test-full-url
   (testing "Constructs full URL using a static string path"
@@ -224,3 +225,70 @@
                :request {:headers {"Accept" "application/json"}}
                :path ["v1" :ref/patient-id]}]
              (op/flatten-operations ops))))))
+
+(deftest test-transform
+  (testing "Returns value unchanged when transformers vector is empty"
+    (is (= {:a 1} (op/transform {:a 1} []))))
+
+  (testing "Applies single transformer"
+    (is (= 6 (op/transform 5 [inc]))))
+
+  (testing "Chains multiple transformers in order"
+    (is (= "HELLO!" (op/transform "hello" [#(str % "!") str/upper-case]))))
+
+  (testing "Works with nil transformers (no-op)"
+    (is (= {:status 200} (op/transform {:status 200} nil)))))
+
+(deftest test-compile-with-transformers
+  (testing "Operation with :in transformers modifies context before execution"
+    (let [op-spec {:name :transform-test
+                   :method :get
+                   :path "test"
+                   :request {:body {:arg :ref/injected}}
+                   :transformers {:in [(fn [ctx] (assoc ctx :injected "value"))]}}
+          compiled (op/compile op-spec)
+          operation-fn (get-in compiled [:transform-test :handler])
+          ctx {:ehr-adapter/base-url "https://api.test.com"}
+          result (operation-fn ctx identity)]
+      (is (= "value" (get-in result [:body :arg])))))
+
+  (testing "Operation with :out transformers modifies response after execution"
+    (let [op-spec {:name :transform-out-test
+                   :method :get
+                   :path "test"
+                   :transformers {:out [(fn [resp] (assoc resp :transformed true))
+                                        (fn [resp] (update resp :status (fnil inc 0)))]}}
+          compiled (op/compile op-spec)
+          operation-fn (get-in compiled [:transform-out-test :handler])
+          ctx {:ehr-adapter/base-url "https://api.test.com"}
+          mock-handler (fn [_] {:status 200 :body "OK"})
+          result (operation-fn ctx mock-handler)]
+      (is (= true (:transformed result)))
+      (is (= 201 (:status result)))))
+
+  (testing "Operation with both :in and :out transformers"
+    (let [op-spec {:name :full-transform-test
+                   :method :post
+                   :path "test"
+                   :request {:body {:date :ref/timestamp}}
+                   :transformers {:in [(fn [ctx] (assoc ctx :timestamp "2024-01-01"))]
+                                  :out [(fn [resp] (assoc resp :processed true))]}}
+          compiled (op/compile op-spec)
+          operation-fn (get-in compiled [:full-transform-test :handler])
+          ctx {:ehr-adapter/base-url "https://api.test.com"}
+          capture-handler (fn [req] {:status 200 :timestamp (get-in req [:body :date])})
+          result (operation-fn ctx capture-handler)]
+      (is (= "2024-01-01" (:timestamp result)))
+      (is (= true (:processed result)))))
+
+  (testing "Operation without transformers works normally"
+    (let [op-spec {:name :no-transform-test
+                   :method :get
+                   :path "test"}
+          compiled (op/compile op-spec)
+          operation-fn (get-in compiled [:no-transform-test :handler])
+          ctx {:ehr-adapter/base-url "https://api.test.com"}
+          mock-handler (fn [_] {:status 200 :body "OK"})
+          result (operation-fn ctx mock-handler)]
+      (is (= 200 (:status result)))
+      (is (= "OK" (:body result))))))

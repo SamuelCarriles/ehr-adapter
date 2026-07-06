@@ -71,7 +71,10 @@
     (update :auth walk [:auth])
 
     (:network config)
-    (update :network walk [:network])))
+    (update :network walk [:network])
+
+    (:operations config)
+    (update :operations walk [:operations])))
 
 (def ^:private supported-formats
   {:edn {:writer #(with-out-str (pprint %))

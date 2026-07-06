@@ -493,6 +493,43 @@
                                                            {:name :cancel-appointment
                                                             :method :delete
                                                             :path [:ref/appointment-id]}]}]}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "20. Operation with both :in and :out transformers"
+    (let [config {:domain :test/transformers-both
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :export-data
+                                :method :post
+                                :path "export"
+                                :transformers {:in [identity indexed?]
+                                               :out [ident?]}}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "21. Operation with only :in transformer"
+    (let [config {:domain :test/transformers-in
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :import-data
+                                :method :post
+                                :path "import"
+                                :transformers {:in [identity]}}]}]
+      (is (= config (schema/validate-adapter-config config)))))
+
+  (testing "22. Operation with only :out transformer"
+    (let [config {:domain :test/transformers-out
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :get-data
+                                :method :get
+                                :path "data"
+                                :transformers {:out [identity #(map :name %)]}}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -500,7 +537,7 @@
 ;; =============================================================================
 
 (deftest invalid-adapter-config-test
-  (testing "Missing mandatory translation middleware (empty vector)"
+  (testing "1. Missing mandatory translation middleware (empty vector)"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -511,7 +548,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Domain missing its namespace (violates multitenant routing design)"
+  (testing "2. Domain missing its namespace (violates multitenant routing design)"
     (let [config {:domain :flat-keyword-without-namespace
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -522,7 +559,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Network configuration validation failures"
+  (testing "3. Network configuration validation failures"
     (testing "Fails if :network is completely missing in root map"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com"
@@ -532,7 +569,7 @@
              #"Invalid Adapter configuration"
              (schema/validate-adapter-config config)))))
 
-    (testing "Fails if :request-handler inside :network is missing"
+    (testing "4. Fails if :request-handler inside :network is missing"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com"
                     :network {:retries 3 :retry-delay-ms 100 :middlewares [mock-translation-middleware]}
@@ -542,7 +579,7 @@
              #"Invalid Adapter configuration"
              (schema/validate-adapter-config config)))))
 
-    (testing "Resiliency policy contradiction (:retries present without :retry-delay-ms)"
+    (testing "5. Resiliency policy contradiction (:retries present without :retry-delay-ms)"
       (try
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
@@ -558,7 +595,7 @@
             (is (some #(str/includes? % "If you configure :retries, you must provide :retry-delay-ms")
                       (:network errors)))))))
 
-    (testing "Fails if HTTP status codes in :retry-on are out of range (100-599)"
+    (testing "6. Fails if HTTP status codes in :retry-on are out of range (100-599)"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com"
                     :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
@@ -570,7 +607,7 @@
              #"Invalid Adapter configuration"
              (schema/validate-adapter-config config))))))
 
-  (testing "Fails when :private-key is completely omitted"
+  (testing "7. Fails when :private-key is completely omitted"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -587,7 +624,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "SMART on FHIR: Rejects when both :private-key and :private-key-set are provided"
+  (testing "8. SMART on FHIR: Rejects when both :private-key and :private-key-set are provided"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -606,7 +643,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "SMART on FHIR: Rejects JWKS with a JWK missing mandatory :kid field"
+  (testing "9. SMART on FHIR: Rejects JWKS with a JWK missing mandatory :kid field"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -624,7 +661,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Operation configuration contains a blank string path segment"
+  (testing "10. Operation configuration contains a blank string path segment"
     (try
       (schema/validate-adapter-config
        {:domain :eclinicalworks/test-tenant
@@ -641,7 +678,7 @@
               path-errors (get-in errors [:operations 0 :path])]
           (is (str/includes? (str path-errors) "operation-path must be a non-blank string or a vector of valid segments"))))))
 
-  (testing "Operation configuration contains an invalid static string path (starts or ends with slash)"
+  (testing "11. Operation configuration contains an invalid static string path (starts or ends with slash)"
     (try
       (schema/validate-adapter-config
        {:domain :eclinicalworks/test-tenant
@@ -658,7 +695,7 @@
               path-errors (get-in errors [:operations 0 :path])]
           (is (str/includes? (str path-errors) "operation-path must be a non-blank string or a vector of valid segments"))))))
 
-  (testing "URL Validation: Reject trailing slashes in base-url and auth properties"
+  (testing "12. URL Validation: Reject trailing slashes in base-url and auth properties"
     (testing "Fails if base-url contains a trailing slash"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com/v1/"
@@ -673,7 +710,7 @@
               (is (some #(clojure.string/includes? % "base-url must be a valid URL without a trailing slash")
                         (:base-url errors))))))))
 
-    (testing "Fails if auth token-url contains a trailing slash"
+    (testing "13. Fails if auth token-url contains a trailing slash"
       (let [config {:domain :eclinicalworks/test-tenant
                     :base-url "https://api.com/v1"
                     :network {:request-handler mock-http-request-handler
@@ -691,7 +728,7 @@
                   auth-errors (get-in errors [:auth :initial 0])]
               (is (clojure.string/includes? (str auth-errors) "token-url must be a valid URL without a trailing slash"))))))))
 
-  (testing "Operation configuration: Reject path segments starting or ending with \"/\""
+  (testing "14. Operation configuration: Reject path segments starting or ending with \"/\""
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com/v1"
                   :network {:request-handler mock-http-request-handler
@@ -709,8 +746,8 @@
             (is (some #(clojure.string/includes? % "operation-path must be a non-blank string or a vector of valid segments")
                       path-errors)))))))
 
-  (testing "Independent :normalize layer validation failures"
-    (testing "Fails if syntax type is not allowed (e.g. passing a raw number instead of path/key/vector)"
+  (testing "15. Independent :normalize layer validation failures"
+    (testing "15a. Fails if syntax type is not allowed (e.g. passing a raw number instead of path/key/vector)"
       (try
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
@@ -724,7 +761,7 @@
           (let [errors (get-in (ex-data ex) [:details :auth :initial 0])]
             (is (some? (:token errors)))))))
 
-    (testing "Fails if :normalize fields are malformed structures (like unpermitted raw maps)"
+    (testing "15b. Fails if :normalize fields are malformed structures (like unpermitted raw maps)"
       (try
         (schema/validate-adapter-config
          {:domain :eclinicalworks/test-tenant
@@ -738,7 +775,7 @@
           (let [errors (get-in (ex-data ex) [:details :auth :initial 0])]
             (is (some? (:token errors))))))))
 
-  (testing "Operation configuration: Reject non-boolean values for :auth?"
+  (testing "16. Operation configuration: Reject non-boolean values for :auth?"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com/v1"
                   :network {:request-handler mock-http-request-handler
@@ -753,7 +790,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Custom auth layer: Rejects when neither :handler nor :options is provided"
+  (testing "17. Custom auth layer: Rejects when neither :handler nor :options is provided"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com/v1"
                   :network {:request-handler mock-http-request-handler
@@ -764,7 +801,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Fails when operation names are duplicated across different groups"
+  (testing "18. Fails when operation names are duplicated across different groups"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -790,7 +827,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Fails when operation name conflicts between root operation and group"
+  (testing "19. Fails when operation name conflicts between root operation and group"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -808,7 +845,7 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Fails when a group is missing mandatory :prefix"
+  (testing "20. Fails when a group is missing mandatory :prefix"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
@@ -820,13 +857,58 @@
            #"Invalid Adapter configuration"
            (schema/validate-adapter-config config)))))
 
-  (testing "Fails when a group has an empty :operations vector"
+  (testing "21. Fails when a group has an empty :operations vector"
     (let [config {:domain :eclinicalworks/test-tenant
                   :base-url "https://api.com"
                   :network {:request-handler mock-http-request-handler
                             :middlewares [mock-translation-middleware]}
                   :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
                   :operations [{:prefix "v1/Patient" :operations []}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "22. Fails when :transformers :in contains non-function elements"
+    (let [config {:domain :test/invalid-transformer-in
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :bad-op
+                                :method :get
+                                :path "test"
+                                :transformers {:in ["not-a-function" identity]}}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "23. Fails when :transformers :out contains non-function elements"
+    (let [config {:domain :test/invalid-transformer-out
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :bad-op
+                                :method :get
+                                :path "test"
+                                :transformers {:out [identity 123]}}]}]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid Adapter configuration"
+           (schema/validate-adapter-config config)))))
+
+  (testing "24. Fails when :transformers is not a map"
+    (let [config {:domain :test/invalid-transformers-structure
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :bad-op
+                                :method :get
+                                :path "test"
+                                :transformers "not-a-map"}]}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
