@@ -48,10 +48,8 @@ This is how explicit, robust, and readable an adapter configuration looks using 
 
    :base-url "https://staging-fhir.ecw.com/fhir/r4"
 
-   :middlewares [bb-http-client/wrap
-                 jsonista/wrap]
-
-   :network-config {:request-handler http/request}
+   :network {:request-handler http/request
+            :middlewares [bb-http-client/wrap jsonista/wrap]}
 
    :auth {:initial [{:type :oauth2
                      :token-url "https://staging-fhir.ecw.com/fhir/oauth2/token"

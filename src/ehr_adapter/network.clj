@@ -1,4 +1,4 @@
-(ns ehr-adapter.http.network-config
+(ns ehr-adapter.network
   (:require [clojure.tools.logging :as log]))
 
 (defn- needs-retry?
@@ -25,7 +25,7 @@
 
 (defn with-client
   "Wraps a handler with a specific http-client"
-  [handler client]
+  [handler {:keys [client]}]
   (fn [req]
     (let [full-req (cond-> req
                      (some? client)

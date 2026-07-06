@@ -1,6 +1,6 @@
-(ns ehr-adapter.http.network-config-test
+(ns ehr-adapter.network-test
   (:require [clojure.test :refer [deftest is testing]]
-            [ehr-adapter.http.network-config :refer [with-client with-retries]]))
+            [ehr-adapter.network :refer [with-client with-retries]]))
 
 (deftest with-retries-test
 
@@ -80,12 +80,12 @@
           mock-handler (fn [req]
                          (reset! captured-req req)
                          {:status 200 :body "OK"})
-          custom-client :my-custom-http-client
+          custom-client {:client :my-custom-http-client}
           wrapped-handler (with-client mock-handler custom-client)
           response (wrapped-handler {:uri "/fhir/Patient" :method :get})]
 
       (is (= 200 (:status response)))
-      (is (= custom-client (:client @captured-req))
+      (is (= (:client custom-client) (:client @captured-req))
           "Request should have :client injected")
       (is (= "/fhir/Patient" (:uri @captured-req))
           "Original request fields should be preserved")))
@@ -110,10 +110,10 @@
                          (reset! captured-req req)
                          {:status 200 :body "OK"})
           original-client :original-client
-          new-client :new-client
+          new-client {:client :new-client}
           wrapped-handler (with-client mock-handler new-client)
           response (wrapped-handler {:uri "/fhir/Patient" :method :get :client original-client})]
 
       (is (= 200 (:status response)))
-      (is (= new-client (:client @captured-req))
+      (is (= (:client new-client) (:client @captured-req))
           "Request :client should be overridden with new value"))))

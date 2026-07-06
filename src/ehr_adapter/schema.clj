@@ -172,7 +172,7 @@
     [:normalize NormalizeMap]
     [:custom CustomAuth]]])
 
-(def NetworkConfiguration
+(def Network
   [:and
    [:fn {:error/message "If you configure :retries, you must provide :retry-delay-ms"}
     (fn [{:keys [retries retry-delay-ms]}]
@@ -187,7 +187,8 @@
                                        :linear :exponential]]
     [:before-retry {:optional true} [:fn {:error/message "on-retry must be a Clojure function"} fn?]]
     [:request-handler [:fn {:error/message "request-handler must be a Clojure function"} fn?]]
-    [:client {:optional true} :any]]])
+    [:client {:optional true} :any]
+    [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]]])
 
 ;;=================================================================================
 ;; Operation Schemas
@@ -223,12 +224,12 @@
   [:map {:closed true}
    [:domain :qualified-keyword]
    [:base-url [:fn {:error/message "base-url must be a valid URL without a trailing slash"} no-trailing-slash-url?]]
-   [:middlewares [:vector {:min 1} [:fn {:error/message "each middleware must be a Clojure function"} fn?]]]
+
    [:auth {:optional true}
     [:map
      [:initial [:vector Authentication]]
      [:refresh {:optional true} [:vector Authentication]]]]
-   [:network-config NetworkConfiguration]
+   [:network Network]
    [:operations {:optional true}
     [:and
      [:fn {:error/message "Operation names must be unique across all operations and groups"} unique-op-names?]

@@ -31,9 +31,9 @@
   (testing "Nested structures survive roundtrip"
     (let [data {:domain :eclinicalworks/tenant-alpha
                 :base-url "https://fhir.ecw.com/v1/fhir"
-                :network-config {:retries 3
-                                 :retry-on [500 502 503]}
-                :middlewares :ref/middlewares
+                :network {:retries 3
+                          :retry-on [500 502 503]
+                          :middlewares [:ref/network.middlewares.0]}
                 :auth {:initial [{:type :custom
                                   :handler :ref/auth.initial.0.handler}]}}]
       (is (= data (transit/<-string (transit/->string data))))))

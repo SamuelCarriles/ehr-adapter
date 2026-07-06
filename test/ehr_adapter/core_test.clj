@@ -34,8 +34,8 @@
 
           config {:domain :test/clinic
                   :base-url :ref/base-url
-                  :middlewares [mock-middleware]
-                  :network-config {:request-handler mock-handler}
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
                   :auth {:initial [{:type :oauth2
                                     :token-url "https://auth.test-clinic.com/oauth/token"
                                     :grant-type "client_credentials"
@@ -88,8 +88,8 @@
           mock-handler (make-mock-http-handler call-log)
           config {:domain :test/groups
                   :base-url "https://api.test.com"
-                  :network-config {:request-handler mock-handler}
-                  :middlewares [mock-middleware]
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
                   :operations [{:prefix "v1/Patient"
                                 :operations [{:name :search-patient
                                               :method :get}
@@ -112,8 +112,8 @@
 
           config {:domain :test/public-api
                   :base-url "https://public.api.com/v1"
-                  :middlewares [mock-middleware]
-                  :network-config {:request-handler mock-handler}
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
                   :operations [{:name :get-status
                                 :path ["status" :ref/env]
                                 :method :get}]}
@@ -145,8 +145,8 @@
 
           config {:domain :test/mixed-auth
                   :base-url "https://api.test.com/v1"
-                  :middlewares [mock-middleware]
-                  :network-config {:request-handler mock-handler}
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
                   :auth {:initial [{:type :oauth2
                                     :token-url "https://auth.test.com/oauth/token"
                                     :grant-type "client_credentials"
@@ -207,9 +207,9 @@
 
           config {:domain :test/client-injection
                   :base-url "https://api.test.com/v1"
-                  :middlewares [mock-middleware]
-                  :network-config {:request-handler mock-handler
-                                   :client custom-client}
+                  :network {:request-handler mock-handler
+                            :client custom-client
+                            :middlewares [mock-middleware]}
                   :operations [{:name :get-status
                                 :path "status"
                                 :method :get}]}
@@ -232,8 +232,8 @@
 
           config {:domain :test/no-client
                   :base-url "https://api.test.com/v1"
-                  :middlewares [mock-middleware]
-                  :network-config {:request-handler mock-handler}
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
                   :operations [{:name :get-status
                                 :path "status"
                                 :method :get}]}
