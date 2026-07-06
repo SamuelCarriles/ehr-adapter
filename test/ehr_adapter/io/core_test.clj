@@ -195,7 +195,97 @@
       (is (= :ref/network.before-retry (get-in result [:network :before-retry])))
       (is (= "epic-client-123" (get-in result [:auth :initial 0 :client-id])))
       (is (= :ref/auth.initial.1.handler (get-in result [:auth :initial 1 :handler])))
-      (is (= "refresh_token" (get-in result [:auth :refresh 0 :grant-type]))))))
+      (is (= "refresh_token" (get-in result [:auth :refresh 0 :grant-type])))))
+
+  (testing "7. Operation with :transformers :in and :out functions are replaced by indexed :refs"
+    (let [config {:domain :test/ops-transformers
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :export-data
+                                :method :post
+                                :path "export"
+                                :transformers {:in [identity]
+                                               :out [identity]}}]}
+          result (core/->serializable config)]
+      (is (= :ref/operations.0.transformers.in.0
+             (get-in result [:operations 0 :transformers :in 0])))
+      (is (= :ref/operations.0.transformers.out.0
+             (get-in result [:operations 0 :transformers :out 0])))
+      (is (= :export-data (get-in result [:operations 0 :name])))))
+
+  (testing "8. Operation with multiple transformers in :in and :out get indexed correctly"
+    (let [config {:domain :test/multi-transformers
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :transform-op
+                                :method :post
+                                :path "transform"
+                                :transformers {:in [identity vec]
+                                               :out [identity str vec]}}]}
+          result (core/->serializable config)]
+      (is (= :ref/operations.0.transformers.in.0
+             (get-in result [:operations 0 :transformers :in 0])))
+      (is (= :ref/operations.0.transformers.in.1
+             (get-in result [:operations 0 :transformers :in 1])))
+      (is (= :ref/operations.0.transformers.out.0
+             (get-in result [:operations 0 :transformers :out 0])))
+      (is (= :ref/operations.0.transformers.out.1
+             (get-in result [:operations 0 :transformers :out 1])))
+      (is (= :ref/operations.0.transformers.out.2
+             (get-in result [:operations 0 :transformers :out 2])))))
+
+  (testing "9. Operation with only :in transformer leaves :out untouched"
+    (let [config {:domain :test/in-only-transformer
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :in-only-op
+                                :method :post
+                                :path "in"
+                                :transformers {:in [identity]}}]}
+          result (core/->serializable config)]
+      (is (= :ref/operations.0.transformers.in.0
+             (get-in result [:operations 0 :transformers :in 0])))
+      (is (nil? (get-in result [:operations 0 :transformers :out])))))
+
+  (testing "10. Operations inside OperationGroups with transformers are serialized with correct indexed paths"
+    (let [config {:domain :test/group-transformers
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:prefix "v1"
+                                :operations [{:name :group-op-1
+                                              :method :get
+                                              :path "op1"
+                                              :transformers {:in [identity]}}
+                                             {:name :group-op-2
+                                              :method :post
+                                              :path "op2"
+                                              :transformers {:out [str]}}]}]}
+          result (core/->serializable config)]
+      (is (= :ref/operations.0.operations.0.transformers.in.0
+             (get-in result [:operations 0 :operations 0 :transformers :in 0])))
+      (is (= :ref/operations.0.operations.1.transformers.out.0
+             (get-in result [:operations 0 :operations 1 :transformers :out 0])))))
+
+  (testing "11. Operations without :transformers are left unchanged"
+    (let [config {:domain :test/no-transformers
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+                  :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}
+                  :operations [{:name :plain-op
+                                :method :get
+                                :path "plain"}]}
+          result (core/->serializable config)]
+      (is (nil? (get-in result [:operations 0 :transformers])))
+      (is (= :plain-op (get-in result [:operations 0 :name]))))))
 
 ;; =============================================================================
 ;; export! Tests (in-memory, no :dir)

@@ -504,8 +504,8 @@
                   :operations [{:name :export-data
                                 :method :post
                                 :path "export"
-                                :transformers {:in [(fn [x] x) (fn [y] y)]
-                                               :out [(fn [z] z)]}}]}]
+                                :transformers {:in [identity indexed?]
+                                               :out [ident?]}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
   (testing "21. Operation with only :in transformer"
@@ -517,7 +517,7 @@
                   :operations [{:name :import-data
                                 :method :post
                                 :path "import"
-                                :transformers {:in [(fn [x] x)]}}]}]
+                                :transformers {:in [identity]}}]}]
       (is (= config (schema/validate-adapter-config config)))))
 
   (testing "22. Operation with only :out transformer"
@@ -529,7 +529,7 @@
                   :operations [{:name :get-data
                                 :method :get
                                 :path "data"
-                                :transformers {:out [(fn [x] x) (fn [y] y)]}}]}]
+                                :transformers {:out [identity #(map :name %)]}}]}]
       (is (= config (schema/validate-adapter-config config))))))
 
 ;; =============================================================================
@@ -878,7 +878,7 @@
                   :operations [{:name :bad-op
                                 :method :get
                                 :path "test"
-                                :transformers {:in ["not-a-function" (fn [x] x)]}}]}]
+                                :transformers {:in ["not-a-function" identity]}}]}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
@@ -893,7 +893,7 @@
                   :operations [{:name :bad-op
                                 :method :get
                                 :path "test"
-                                :transformers {:out [(fn [x] x) 123]}}]}]
+                                :transformers {:out [identity 123]}}]}]
       (is (thrown-with-msg?
            clojure.lang.ExceptionInfo
            #"Invalid Adapter configuration"
