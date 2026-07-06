@@ -1,11 +1,12 @@
 (ns ehr-adapter.schema
-  (:require [malli.core :as m]
-            [malli.error :as me]
-            [malli.util :as mu]
-            [clojure.string :as str]
-            [buddy.sign.jws :as jws]
-            [ehr-adapter.error :as error]
-            [ehr-adapter.reference :as ref])
+  (:require
+   [malli.core :as m]
+   [malli.error :as me]
+   [malli.util :as mu]
+   [clojure.string :as str]
+   [buddy.sign.jws :as jws]
+   [ehr-adapter.error :as error]
+   [ehr-adapter.reference :as ref])
   (:import [org.apache.commons.validator.routines UrlValidator]
            [java.io File]))
 
@@ -188,13 +189,31 @@
     [:request-handler [:fn {:error/message "request-handler must be a Clojure function"} fn?]]
     [:client {:optional true} :any]]])
 
+;;=================================================================================
+;; Operation Schemas
+(defn- collect-names
+  [operations]
+  (mapcat (fn [op]
+            (if (:operations op)
+              (collect-names (:operations op))
+              [(:name op)]))
+          operations))
+
+(defn unique-op-names?
+  [operations]
+  (or (empty? operations)
+      (apply distinct? (collect-names operations))))
+
+(def OperationPath
+  [:or
+   [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]
+   [:vector {:min 1}
+    [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]]])
+
 (def Operation
   [:map
    [:name :keyword]
-   [:path [:or
-           [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]
-           [:vector
-            [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]]]]
+   [:path {:optional true} OperationPath]
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:auth? {:optional true} :boolean]
    [:request {:optional true} HttpRequestOperation]
@@ -211,7 +230,9 @@
      [:refresh {:optional true} [:vector Authentication]]]]
    [:network-config NetworkConfiguration]
    [:operations {:optional true}
-    [:vector Operation]]])
+    [:and
+     [:fn {:error/message "Operation names must be unique across all operations and groups"} unique-op-names?]
+     [:vector {:min 1} [:or Operation [:ref ::operation-group]]]]]])
 
 ;; =================================================================
 ;; AdapterInstance
@@ -267,9 +288,16 @@
 ;; =================================================================
 ;; Validators
 
+(def registry
+  (merge
+   (m/default-schemas)
+   {::operation-group [:map
+                       [:prefix OperationPath]
+                       [:operations [:vector {:min 1} [:or Operation [:ref ::operation-group]]]]]}))
+
 (defn validate-schema
   [schema form error-message]
-  (if-let [explain (m/explain schema form)]
+  (if-let [explain (m/explain schema form {:registry registry})]
     (throw (error/info :invalid/schema {:message error-message
                                         :scope :ehr-adapter.schema
                                         :operation :validate

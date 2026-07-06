@@ -82,7 +82,28 @@
       ;; The final result is the standard success response from the API
       (is (= {:status "success"
               :message "Operation executed successfully"}
-             (:body result))))))
+             (:body result)))))
+  (testing "Initialize with OperationGroups resolves the prefix into the final URL"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+          config {:domain :test/groups
+                  :base-url "https://api.test.com"
+                  :network-config {:request-handler mock-handler}
+                  :middlewares [mock-middleware]
+                  :operations [{:prefix "v1/Patient"
+                                :operations [{:name :search-patient
+                                              :method :get}
+                                             {:name :read-patient
+                                              :method :get
+                                              :path [:ref/patient-id]}]}]}
+          instance (core/initialize config)]
+
+      (core/invoke instance :search-patient)
+      (is (= "https://api.test.com/v1/Patient" (:url (first @call-log))))
+
+      (reset! call-log [])
+      (core/invoke instance :read-patient {:patient-id "42"})
+      (is (= "https://api.test.com/v1/Patient/42" (:url (first @call-log)))))))
 
 (deftest core-integration-no-auth-flow-test
   (testing "Flow without authentication: bypasses token logic, resolves dynamic refs, preserves user headers"

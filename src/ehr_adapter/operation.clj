@@ -43,21 +43,21 @@
 
    x))
 
-(defn path->str
-  "Resolves any dynamic references inside the path vector using the provided 
-   context (ctx) and joins the resulting segments into a URL path string."
-  [ctx path]
-  (->> path
-       (ref/resolve ctx)
-       (str/join "/")))
+(defn ->path
+  [x]
+  (cond
+    (string? x) [x]
+    (nil? x) []
+    :else x))
 
 (defn full-url
   "Constructs a complete URL by resolving the path against the context (ctx) 
    and appending it to the base-url found within the context."
   [ctx path]
   (let [base-url (:ehr-adapter/base-url ctx)
-        path (if (string? path) path (path->str ctx path))]
-    (str base-url "/" path)))
+        path (->path path)
+        resolved-path (ref/resolve ctx path)]
+    (str/join "/" (into [base-url] resolved-path))))
 
 (defn clasify-ref-keys
   "Groups a collection of reference keywords into a map of :required-keys 
@@ -71,6 +71,19 @@
     (cond-> {:required-keys req-k}
       (seq filter-opt-k)
       (assoc :optional-keys filter-opt-k))))
+
+(defn flatten-operations
+  "Flattens nested operation groups into a single vector with fully resolved paths."
+  [operations]
+  (letfn [(flatter [ops prefix-acc]
+            (mapcat (fn [op]
+                      (if (and (:prefix op)
+                               (:operations op))
+                        (let [new-prefix (into prefix-acc (->path (:prefix op)))]
+                          (flatter (:operations op) new-prefix))
+                        [(assoc op :path (into prefix-acc (->path (:path op))))]))
+                    ops))]
+    (vec (flatter operations []))))
 
 (defn compile
   "Compiles an operation map into an executable closure mapped to the 
