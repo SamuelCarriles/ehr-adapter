@@ -58,7 +58,7 @@
    every function it contains with a :ref/... keyword the developer must
    resupply when reimporting the configuration.
    :middlewares is replaced as a single whole :ref (not walked into); :auth
-   and :network-config are walked recursively so every nested handler gets
+   and :network are walked recursively so every nested handler gets
    its own indexed :ref.
    Args:
    - config : An adapter configuration map (as accepted by ehr-adapter.schema/AdapterConfiguration).
@@ -67,14 +67,11 @@
    EDN or transit+json."
   [config]
   (cond-> config
-    (:middlewares config)
-    (assoc :middlewares :ref/middlewares)
-
     (:auth config)
     (update :auth walk [:auth])
 
-    (:network-config config)
-    (update :network-config walk [:network-config])))
+    (:network config)
+    (update :network walk [:network])))
 
 (def ^:private supported-formats
   {:edn {:writer #(with-out-str (pprint %))
@@ -156,4 +153,3 @@
     (if-some [reader (get-in supported-formats [fmt :reader])]
       (reader (slurp file))
       (format-error fmt))))
-

@@ -2,14 +2,14 @@
   (:require
    [ehr-adapter.schema :as schema]
    [ehr-adapter.auth.core :as auth-core]
-   [ehr-adapter.http.network-config :as net]
+   [ehr-adapter.network :as net]
    [ehr-adapter.http.header :refer [authorization]]
    [ehr-adapter.operation :as op]
    [ehr-adapter.reference :refer [partial-resolve]]
    [ehr-adapter.error :as error]))
 
 (defn wrap-handler
-  [request-handler middlewares]
+  [{:keys [request-handler middlewares]}]
   (reduce (fn [handler middleware]
             (middleware handler))
           request-handler middlewares))
@@ -32,12 +32,10 @@
   ([adapter-config] (initialize {} adapter-config))
   ([ctx adapter-config]
    (let [partial-resolved-cfg (->> adapter-config (partial-resolve ctx) schema/validate-adapter-config)
-         {:keys [domain base-url middlewares auth network-config operations]} partial-resolved-cfg
-         request-handler (:request-handler network-config)
-         wrapped-handler (-> request-handler
-                             (wrap-handler middlewares)
-                             (net/with-retries network-config)
-                             (net/with-client (:client network-config)))
+         {:keys [domain base-url auth network operations]} partial-resolved-cfg
+         wrapped-handler (-> (wrap-handler network)
+                             (net/with-retries network)
+                             (net/with-client network))
 
          auth-initial-layers (:initial auth)
 

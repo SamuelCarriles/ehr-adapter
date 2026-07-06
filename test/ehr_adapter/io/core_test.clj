@@ -34,8 +34,8 @@
 (def ^:private base-config
   {:domain :eclinicalworks/tenant-alpha
    :base-url "https://fhir.ecw.com/v1/fhir"
-   :network-config {:request-handler mock-http-request-handler}
-   :middlewares [mock-translation-middleware]
+   :network {:request-handler mock-http-request-handler
+             :middlewares [mock-translation-middleware]}
    :auth {:initial [{:type :custom :handler mock-custom-auth-handler}]}})
 
 ;; =============================================================================
@@ -44,8 +44,8 @@
 
 (deftest path->ref-test
   (testing "Builds a :ref keyword from a simple path of two keywords"
-    (is (= :ref/network-config.request-handler
-           (core/path->ref [:network-config :request-handler]))))
+    (is (= :ref/network.request-handler
+           (core/path->ref [:network :request-handler]))))
 
   (testing "Builds a :ref keyword from a path containing a numeric index"
     (is (= :ref/auth.initial.1.handler
@@ -64,8 +64,8 @@
 
 (deftest walk-test
   (testing "A bare function is replaced by its corresponding :ref"
-    (is (= :ref/network-config.request-handler
-           (core/walk mock-http-request-handler [:network-config :request-handler]))))
+    (is (= :ref/network.request-handler
+           (core/walk mock-http-request-handler [:network :request-handler]))))
 
   (testing "A map without functions is returned unchanged"
     (let [m {:username "u" :password "p"}]
@@ -96,7 +96,7 @@
 
   (testing "Scalars (strings, numbers, keywords, nil) pass through untouched"
     (is (= "https://api.ehr.com" (core/walk "https://api.ehr.com" [:base-url])))
-    (is (= 5000 (core/walk 5000 [:network-config :timeout-ms])))
+    (is (= 5000 (core/walk 5000 [:network :timeout-ms])))
     (is (= :basic-auth (core/walk :basic-auth [:auth :initial 0 :type])))
     (is (nil? (core/walk nil [:anything])))))
 
@@ -105,41 +105,30 @@
 ;; =============================================================================
 
 (deftest ->serializable-test
-  (testing "1. :middlewares is replaced as a single, whole :ref (not recursed into)"
-    (let [config {:domain :eclinicalworks/tenant-alpha
-                  :base-url "https://fhir.ecw.com/v1/fhir"
-                  :network-config {:request-handler mock-http-request-handler}
-                  :middlewares [mock-translation-middleware]
-                  :auth {:initial [{:type :basic-auth
-                                    :username "integrator-user"
-                                    :password "secret-pass-123"}]}}
-          result (core/->serializable config)]
-      (is (= :ref/middlewares (:middlewares result)))
-      (is (= :eclinicalworks/tenant-alpha (:domain result)))
-      (is (= "https://fhir.ecw.com/v1/fhir" (:base-url result)))))
-
-  (testing "2. :network-config handlers are replaced by their :ref, scalar options untouched"
+  (testing "1. :network handlers are replaced by their :ref, scalar options untouched"
     (let [config {:domain :eclinicalworks/tenant-beta
                   :base-url "https://api.eclinicalworks.com/v2"
-                  :network-config {:retries 3
-                                   :retry-delay-ms 200
-                                   :retry-strategy :exponential
-                                   :retry-on [500 502 503 504]
-                                   :before-retry mock-before-retry
-                                   :request-handler mock-http-request-handler}
-                  :middlewares [mock-translation-middleware]
+                  :network {:retries 3
+                            :retry-delay-ms 200
+                            :retry-strategy :exponential
+                            :retry-on [500 502 503 504]
+                            :before-retry mock-before-retry
+                            :request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
+
                   :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}}
           result (core/->serializable config)]
-      (is (= :ref/network-config.request-handler (get-in result [:network-config :request-handler])))
-      (is (= :ref/network-config.before-retry (get-in result [:network-config :before-retry])))
-      (is (= 3 (get-in result [:network-config :retries])))
-      (is (= [500 502 503 504] (get-in result [:network-config :retry-on])))))
+      (is (= :ref/network.request-handler (get-in result [:network :request-handler])))
+      (is (= :ref/network.before-retry (get-in result [:network :before-retry])))
+      (is (= 3 (get-in result [:network :retries])))
+      (is (= [500 502 503 504] (get-in result [:network :retry-on])))
+      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0])))))
 
-  (testing "3. Custom auth handler inside :auth :initial is replaced by an indexed :ref"
+  (testing "2. Custom auth handler inside :auth :initial is replaced by an indexed :ref"
     (let [config {:domain :epic/hospital-central-prod
                   :base-url "https://epic.hospital.org/api"
-                  :network-config {:request-handler mock-http-request-handler}
-                  :middlewares [mock-translation-middleware]
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
                   :auth {:initial [{:type :custom
                                     :handler mock-custom-auth-handler
                                     :options {:request {:query-params {:sandbox true}}}}]}}
@@ -148,11 +137,11 @@
       (is (= :custom (get-in result [:auth :initial 0 :type])))
       (is (= {:request {:query-params {:sandbox true}}} (get-in result [:auth :initial 0 :options])))))
 
-  (testing "4. Custom auth handler inside :auth :refresh is replaced by its own indexed :ref, independent of :initial"
+  (testing "3. Custom auth handler inside :auth :refresh is replaced by its own indexed :ref, independent of :initial"
     (let [config {:domain :epic/sandbox-smart-pem
                   :base-url "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4"
-                  :network-config {:request-handler mock-http-request-handler}
-                  :middlewares [mock-translation-middleware]
+                  :network {:request-handler mock-http-request-handler
+                            :middlewares [mock-translation-middleware]}
                   :auth {:initial [{:type :basic-auth :username "u" :password "p"}]
                          :refresh [{:type :custom :handler mock-custom-auth-handler}]}}
           result (core/->serializable config)]
@@ -160,11 +149,11 @@
              (get-in result [:auth :initial 0])))
       (is (= :ref/auth.refresh.0.handler (get-in result [:auth :refresh 0 :handler])))))
 
-  (testing "5. A non-custom auth layer (no functions inside) is left completely untouched"
+  (testing "4. A non-custom auth layer (no functions inside) is left completely untouched"
     (let [config {:domain :eclinicalworks/tenant-beta
                   :base-url "https://api.eclinicalworks.com/v2"
-                  :network-config {:request-handler mock-http-request-handler}
-                  :middlewares [mock-translation-middleware]
+                  :network {:middlewares [mock-translation-middleware]
+                            :request-handler mock-http-request-handler}
                   :auth {:initial [{:type :oauth2
                                     :token-url "https://auth.eclinicalworks.com/oauth/token"
                                     :grant-type "client_credentials"
@@ -173,21 +162,19 @@
           result (core/->serializable config)]
       (is (= (get-in config [:auth :initial]) (get-in result [:auth :initial])))))
 
-  (testing "6. Config without :auth or :network-config keys is left unaffected by their cond-> clauses"
+  (testing "5. Config without :auth or :network keys is left unaffected by their cond-> clauses"
     (let [config {:domain :hapi-fhir/public-sandbox
-                  :base-url "https://hapi.fhir.org/baseR4"
-                  :middlewares [mock-translation-middleware]}
+                  :base-url "https://hapi.fhir.org/baseR4"}
           result (core/->serializable config)]
-      (is (= :ref/middlewares (:middlewares result)))
       (is (nil? (:auth result)))
-      (is (nil? (:network-config result)))))
+      (is (nil? (:network result)))))
 
-  (testing "7. Full integration: middlewares, network-config and auth (initial + refresh) all transformed together"
+  (testing "6. Full integration: middlewares, network and auth (initial + refresh) all transformed together"
     (let [config {:domain :epic/sandbox-smart-pem
                   :base-url "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4"
-                  :network-config {:request-handler mock-http-request-handler
-                                   :before-retry mock-before-retry}
-                  :middlewares [mock-translation-middleware mock-translation-middleware]
+                  :network {:request-handler mock-http-request-handler
+                            :before-retry mock-before-retry
+                            :middlewares [mock-translation-middleware mock-translation-middleware]}
                   :auth {:initial [{:type :smart-on-fhir/backend-services
                                     :client-id "epic-client-123"
                                     :key-id "key-prod-1"
@@ -203,9 +190,9 @@
                                     :client-id "epic-client-123"
                                     :client-secret "client-secret"}]}}
           result (core/->serializable config)]
-      (is (= :ref/middlewares (:middlewares result)))
-      (is (= :ref/network-config.request-handler (get-in result [:network-config :request-handler])))
-      (is (= :ref/network-config.before-retry (get-in result [:network-config :before-retry])))
+      (is (= [:ref/network.middlewares.0 :ref/network.middlewares.1] (get-in result [:network :middlewares])))
+      (is (= :ref/network.request-handler (get-in result [:network :request-handler])))
+      (is (= :ref/network.before-retry (get-in result [:network :before-retry])))
       (is (= "epic-client-123" (get-in result [:auth :initial 0 :client-id])))
       (is (= :ref/auth.initial.1.handler (get-in result [:auth :initial 1 :handler])))
       (is (= "refresh_token" (get-in result [:auth :refresh 0 :grant-type]))))))
@@ -219,19 +206,19 @@
     (let [result (core/export! base-config {:format :edn})
           parsed (edn/read-string result)]
       (is (string? result))
-      (is (= :ref/middlewares (:middlewares parsed)))
+      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
       (is (= :ref/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))
-      (is (= :ref/network-config.request-handler (get-in parsed [:network-config :request-handler])))))
+      (is (= :ref/network.request-handler (get-in parsed [:network :request-handler])))))
 
   (testing "Without :dir, :transit format returns a transit+json string with refs in place of functions"
     (let [result (core/export! base-config {:format :transit})
           parsed (transit/<-string result)]
       (is (string? result))
-      (is (= :ref/middlewares (:middlewares parsed)))
+      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
       (is (= :ref/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))))
 
-  (testing "Throws when the config is invalid (e.g. missing :network-config)"
-    (let [invalid-config (dissoc base-config :network-config)]
+  (testing "Throws when the config is invalid (e.g. missing :network)"
+    (let [invalid-config (dissoc base-config :network)]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
                             #"Invalid Adapter configuration"
                             (core/export! invalid-config {:format :edn}))))))
@@ -267,13 +254,13 @@
     (let [file (core/export! base-config {:format :edn :dir test-dir :file-name "roundtrip.edn"})
           file-content (slurp file)
           parsed (edn/read-string file-content)]
-      (is (= :ref/middlewares (:middlewares parsed)))
+      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
       (is (= :ref/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))))
 
   (testing "Transit format written to disk produces a valid transit+json file"
     (let [file (core/export! base-config {:format :transit :dir test-dir :file-name "roundtrip.json"})
           parsed (transit/<-string (slurp file))]
-      (is (= :ref/middlewares (:middlewares parsed))))))
+      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0]))))))
 
 ;; =============================================================================
 ;; ->file-name Tests (via the public surface, indirectly through export!)
@@ -298,27 +285,27 @@
   (testing "Reads back an EDN file when a java.io.File is passed directly via :file"
     (let [written (core/export! base-config {:format :edn :dir test-dir :file-name "via-file.edn"})
           result (core/import {:format :edn :file written})]
-      (is (= :ref/middlewares (:middlewares result)))
+      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0])))
       (is (= :ref/auth.initial.0.handler (get-in result [:auth :initial 0 :handler])))))
 
   (testing "Reads back a transit+json file when a java.io.File is passed directly via :file"
     (let [written (core/export! base-config {:format :transit :dir test-dir :file-name "via-file.json"})
           result (core/import {:format :transit :file written})]
-      (is (= :ref/middlewares (:middlewares result))))))
+      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0]))))))
 
 (deftest import-with-dir-and-file-name-test
   (testing "Reads back a file located by :dir + :file-name"
     (core/export! base-config {:format :edn :dir test-dir :file-name "via-dir.edn"})
     (let [result (core/import {:format :edn :dir test-dir :file-name "via-dir.edn"})]
-      (is (= :ref/middlewares (:middlewares result)))
-      (is (= :ref/network-config.request-handler (get-in result [:network-config :request-handler]))))))
+      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0])))
+      (is (= :ref/network.request-handler (get-in result [:network :request-handler]))))))
 
 (deftest import-with-file-name-only-test
   (testing "Reads back a file located by :file-name alone, looked up in the current working directory"
     (let [file-name "via-cwd.edn"]
       (core/export! base-config {:format :edn :file-name file-name})
       (let [result (core/import {:format :edn :file-name file-name})]
-        (is (= :ref/middlewares (:middlewares result))))
+        (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0]))))
       (io/delete-file (io/file file-name) true))))
 
 (deftest import-missing-file-test
