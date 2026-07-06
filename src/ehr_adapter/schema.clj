@@ -205,6 +205,11 @@
   (or (empty? operations)
       (apply distinct? (collect-names operations))))
 
+(def Transformers
+  [:map
+   [:in {:optional true} [:vector [:fn {:error/message "each :in element must be a Clojure function"} fn?]]]
+   [:out {:optional true} [:vector [:fn {:error/message "each :out element must be a Clojure function"} fn?]]]])
+
 (def OperationPath
   [:or
    [:fn {:error/message "operation-path must be a non-blank string or a vector of valid segments (non-blank strings or references :ref/...), and can not start or end with \"/\""} path-segment?]
@@ -218,7 +223,11 @@
    [:method [:enum :get :post :patch :delete :head :put :options :trace :connect]]
    [:auth? {:optional true} :boolean]
    [:request {:optional true} HttpRequestOperation]
+   [:transformers {:optional true} Transformers]
    [:description {:optional true} [:fn {:error/message "operation-description must be a non-blank string"} not-blank-str?]]])
+
+;; =================================================================
+;; Adapter configuration
 
 (def AdapterConfiguration
   [:map {:closed true}
