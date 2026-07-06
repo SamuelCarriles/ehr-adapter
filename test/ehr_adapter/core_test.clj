@@ -245,3 +245,114 @@
       (let [api-req (first @call-log)]
         (is (nil? (:client api-req))
             "Request should not have :client when not configured")))))
+
+(deftest core-integration-transformers-test
+  (testing "Operation with :in transformers injects values into context for reference resolution"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+
+          config {:domain :test/in-transformers
+                  :base-url "https://api.test.com/v1"
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
+                  :operations [{:name :get-data
+                                :path "data"
+                                :method :get
+                                :request {:headers {"X-Injected" :ref/injected-value}}
+                                :transformers {:in [(fn [ctx] (assoc ctx :injected-value "transformed-header"))]}}]}
+
+          instance (core/initialize config)
+          result (core/invoke instance :get-data)]
+
+      ;; Verify the transformer injected the value into context
+      (is (= 1 (count @call-log)))
+      (let [api-req (first @call-log)]
+        ;; The reference :ref/injected-value should be resolved to "transformed-header"
+        (is (= "transformed-header" (get-in api-req [:headers "X-Injected"]))))
+
+      (is (= {:status "success"
+              :message "Operation executed successfully"}
+             (:body result)))))
+
+  (testing "Operation with :out transformers modifies response after execution"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+
+          config {:domain :test/out-transformers
+                  :base-url "https://api.test.com/v1"
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
+                  :operations [{:name :get-data
+                                :path "data"
+                                :method :get
+                                :transformers {:out [(fn [resp] (assoc resp :transformed true))
+                                                     (fn [resp] (update resp :status (fnil inc 0)))]}}]}
+
+          instance (core/initialize config)
+          result (core/invoke instance :get-data)]
+
+      ;; Verify the request was made normally
+      (is (= 1 (count @call-log)))
+      (let [api-req (first @call-log)]
+        (is (= "https://api.test.com/v1/data" (:url api-req))))
+
+      ;; Verify the transformers modified the response
+      (is (= true (:transformed result)))
+      (is (= 201 (:status result)))
+      (is (= {:status "success"
+              :message "Operation executed successfully"}
+             (:body result)))))
+
+  (testing "Operation with both :in and :out transformers"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+
+          config {:domain :test/full-transformers
+                  :base-url "https://api.test.com/v1"
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
+                  :operations [{:name :transform-pipeline
+                                :path "transform"
+                                :method :post
+                                :request {:body {:timestamp :ref/timestamp}}
+                                :transformers {:in [(fn [ctx] (assoc ctx :timestamp "2024-01-01"))]
+                                               :out [(fn [resp] (assoc resp :processed true))]}}]}
+
+          instance (core/initialize config)
+          result (core/invoke instance :transform-pipeline)]
+
+      ;; Verify the :in transformer injected value into context
+      (is (= 1 (count @call-log)))
+      (let [api-req (first @call-log)]
+        (is (= "2024-01-01" (get-in api-req [:body :timestamp]))))
+
+      ;; Verify the :out transformer modified the response
+      (is (= true (:processed result)))))
+
+  (testing "Operation without transformers works normally (baseline)"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+
+          config {:domain :test/no-transformers
+                  :base-url "https://api.test.com/v1"
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
+                  :operations [{:name :plain-operation
+                                :path "plain"
+                                :method :get}]}
+
+          instance (core/initialize config)
+          result (core/invoke instance :plain-operation)]
+
+      ;; Verify normal execution without transformers
+      (is (= 1 (count @call-log)))
+      (let [api-req (first @call-log)]
+        (is (= "https://api.test.com/v1/plain" (:url api-req)))
+        (is (= :get (:method api-req))))
+
+      ;; Response should be unchanged
+      (is (= {:status "success"
+              :message "Operation executed successfully"}
+             (:body result)))
+      (is (nil? (:transformed result)))
+      (is (nil? (:processed result))))))
