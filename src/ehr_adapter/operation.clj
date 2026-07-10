@@ -85,9 +85,8 @@
                     ops))]
     (vec (flatter operations []))))
 
-(defn transform
-  [x transformers]
-  (reduce #(%2 %1) x transformers))
+(defn ->transformer [trs]
+  (apply comp (reverse trs)))
 
 (defn compile
   "Compiles an operation map into an executable closure mapped to the 
@@ -97,29 +96,33 @@
    The compiled function expects a runtime context map and a request handler."
   [{:keys [path method auth? request transformers description] :as op :or {auth? true}}]
   (letfn [(operation [ctx req-handler]
-            (let [{in-trs :in out-trs :out} transformers
-                  full-ctx (transform ctx in-trs)
-                  full-url (->> path
-                                (full-url full-ctx)
+            (let [full-url (->> path
+                                (full-url ctx)
                                 schema/validate-url)
 
-                  new-req (:request full-ctx)
+                  new-req (:request ctx)
 
                   req (cond-> {:url full-url :method method}
                         request
                         (merge request)
 
                         new-req
-                        (deep-merge new-req))
-                  result (->> req
-                              (ref/resolve full-ctx)
-                              clean-nil
-                              req-handler)]
-              (transform result out-trs)))]
+                        (deep-merge new-req))]
+              (->> req
+                   (ref/resolve ctx)
+                   clean-nil
+                   req-handler)))]
 
-    (let [op-name (:name op)
+    (let [{:keys [in out]} transformers
+          op-name (:name op)
           ref-keys (clasify-ref-keys (ref/extract op))
           op-map (cond-> (merge {:handler operation :auth? auth?} ref-keys)
+
+                   (seq in)
+                   (assoc-in [:transformers :in] (->transformer in))
+
+                   (seq out)
+                   (assoc-in [:transformers :out] (->transformer out))
                    description
                    (assoc :description description))]
       {op-name op-map})))
