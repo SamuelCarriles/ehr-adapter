@@ -25,7 +25,9 @@
            :ehr-adapter/operations       (into {}
                                                (map (fn [op]
                                                       [(:name op)
-                                                       {:handler (fn [ctx _]
+
+                                                       {:auth? (if (:auth config) true false)
+                                                        :handler (fn [ctx _]
                                                                    {:status 200
                                                                     :executed (:name op)
                                                                     :data ctx})}])
@@ -940,7 +942,8 @@
                     :ehr-adapter/request-handler  mock-http-request-handler
                     :ehr-adapter/auth {:state {:not-an-atom true}
                                        :refresh-fn mock-get-token-fn}
-                    :ehr-adapter/operations {:search-patient {:handler (fn [_ _] {})}}}]
+                    :ehr-adapter/operations {:search-patient {:auth? true
+                                                              :handler (fn [_ _] {})}}}]
       (try
         (schema/validate-adapter-instance instance)
         (is false "Expected ExceptionInfo to be thrown because :state is not an Atom")
@@ -955,14 +958,102 @@
                     :ehr-adapter/request-handler  mock-http-request-handler
                     :ehr-adapter/auth {:state (atom {})
                                        :refresh-fn mock-get-token-fn}
-                    :ehr-adapter/operations {:search-patient {:handler {:this-is-not "a function"}}}}]
+                    :ehr-adapter/operations {:search-patient {:auth? true
+                                                              :handler {:this-is-not "a function"}}}}]
       (try
         (schema/validate-adapter-instance instance)
         (is false "Expected ExceptionInfo due to uncompiled operation map")
         (catch clojure.lang.ExceptionInfo ex
           (let [errors (:details (ex-data ex))
                 op-errors (get-in errors [:ehr-adapter/operations :search-patient :handler])]
-            (is (str/includes? (str op-errors) "the handler must be a compiled Clojure function"))))))))
+            (is (str/includes? (str op-errors) "the handler must be a compiled Clojure function")))))))
+
+  (testing "5. Valid instance with compiled transformers (both :in and :out)"
+    (let [instance {:ehr-adapter/domain :test/with-transformers
+                    :ehr-adapter/base-url "https://api.test.com"
+                    :ehr-adapter/request-handler mock-http-request-handler
+                    :ehr-adapter/auth {:state (atom {:token "xyz"})
+                                       :refresh-fn mock-get-token-fn}
+                    :ehr-adapter/operations
+                    {:export-data {:handler (fn [_ctx _] {:status 200})
+                                   :auth? true
+                                   :transformers {:in (comp identity identity)
+                                                  :out (comp identity identity)}}}}]
+      (is (= instance (schema/validate-adapter-instance instance)))))
+
+  (testing "6. Valid instance with only :in transformer"
+    (let [instance {:ehr-adapter/domain :test/with-in-only
+                    :ehr-adapter/base-url "https://api.test.com"
+                    :ehr-adapter/request-handler mock-http-request-handler
+                    :ehr-adapter/operations
+                    {:import-data {:handler (fn [_ctx _] {:status 200})
+                                   :auth? true
+                                   :transformers {:in identity}}}}]
+      (is (= instance (schema/validate-adapter-instance instance)))))
+
+  (testing "7. Valid instance with only :out transformer"
+    (let [instance {:ehr-adapter/domain :test/with-out-only
+                    :ehr-adapter/base-url "https://api.test.com"
+                    :ehr-adapter/request-handler mock-http-request-handler
+                    :ehr-adapter/operations
+                    {:get-data {:handler (fn [_ctx _] {:status 200})
+                                :auth? false
+                                :transformers {:out identity}}}}]
+      (is (= instance (schema/validate-adapter-instance instance)))))
+
+  (testing "8. Valid instance without transformers (empty map or no key)"
+    (let [instance {:ehr-adapter/domain :test/no-transformers
+                    :ehr-adapter/base-url "https://api.test.com"
+                    :ehr-adapter/request-handler mock-http-request-handler
+                    :ehr-adapter/operations
+                    {:plain-op {:handler (fn [_ctx _] {:status 200})
+                                :auth? true}}}]
+      (is (= instance (schema/validate-adapter-instance instance)))))
+
+  (testing "9. Error: Fails if :transformers :in is not a function"
+    (let [instance {:ehr-adapter/domain :test/invalid-in-transformer
+                    :ehr-adapter/base-url "https://api.test.com"
+                    :ehr-adapter/request-handler mock-http-request-handler
+                    :ehr-adapter/operations
+                    {:bad-op {:handler (fn [_ctx _] {:status 200})
+                              :auth? true
+                              :transformers {:in "not-a-function"}}}}]
+      (try
+        (schema/validate-adapter-instance instance)
+        (is false "Expected ExceptionInfo to be thrown")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))]
+            (is (some? (get-in errors [:ehr-adapter/operations :bad-op :transformers :in]))))))))
+
+  (testing "10. Error: Fails if :transformers :out is not a function"
+    (let [instance {:ehr-adapter/domain :test/invalid-out-transformer
+                    :ehr-adapter/base-url "https://api.test.com"
+                    :ehr-adapter/request-handler mock-http-request-handler
+                    :ehr-adapter/operations
+                    {:bad-op {:handler (fn [_ctx _] {:status 200})
+                              :auth? true
+                              :transformers {:out 123}}}}]
+      (try
+        (schema/validate-adapter-instance instance)
+        (is false "Expected ExceptionInfo to be thrown")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))]
+            (is (some? (get-in errors [:ehr-adapter/operations :bad-op :transformers :out]))))))))
+
+  (testing "11. Error: Fails if :transformers is not a map"
+    (let [instance {:ehr-adapter/domain :test/invalid-transformers-structure
+                    :ehr-adapter/base-url "https://api.test.com"
+                    :ehr-adapter/request-handler mock-http-request-handler
+                    :ehr-adapter/operations
+                    {:bad-op {:handler (fn [_ctx _] {:status 200})
+                              :auth? true
+                              :transformers "not-a-map"}}}]
+      (try
+        (schema/validate-adapter-instance instance)
+        (is false "Expected ExceptionInfo to be thrown")
+        (catch clojure.lang.ExceptionInfo ex
+          (let [errors (:details (ex-data ex))]
+            (is (some? (get-in errors [:ehr-adapter/operations :bad-op :transformers])))))))))
 
 ;; =============================================================================
 ;; HttpRequest Schema Tests
