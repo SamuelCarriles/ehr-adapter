@@ -13,7 +13,11 @@
   (testing "Combined reference? predicate works for both"
     (is (true? (ref/reference? :ref/id)))
     (is (true? (ref/reference? :ref?/id)))
-    (is (false? (ref/reference? :normal/id))))
+    (is (false? (ref/reference? :normal/id)))
+    (is (true? (ref/reference? :ref#pos-int/age)))
+    (is (false? (ref/reference? :ref#/age)))
+    (is (true? (ref/reference? :ref?#string/code)))
+    (is (false? (ref/reference? :ref?#/code))))
   ;; -----------------------------------------------------------
 
   (testing "Rejects keywords from other namespaces or without namespace"

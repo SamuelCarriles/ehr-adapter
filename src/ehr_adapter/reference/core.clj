@@ -1,27 +1,47 @@
 (ns ehr-adapter.reference.core
   (:refer-clojure :exclude [resolve])
-  (:require [clojure.walk :refer [postwalk]]
-            [ehr-adapter.error :as error]))
+  (:require
+   [clojure.string :as str]
+   [clojure.walk :refer [postwalk]]
+   [ehr-adapter.error :as error]))
 
-(defn  required-reference?
-  "Returns true if x is a keyword with the namespace 'ref' 
-  (e.g., :ref/patientId). Otherwise, returns false."
-  [x]
-  (and (keyword? x)
-       (= "ref" (namespace x))))
-
-(defn optional-reference?
-  "Returns true if x is a keyword with the namespace 'ref?' 
-  (e.g., :ref/patientId). Otherwise, returns false."
-  [x]
-  (and (keyword? x)
-       (= "ref?" (namespace x))))
+(def ^:private reference-regex #"^ref(\?|#.+|\?#.+)?$")
 
 (defn reference?
-
+  "Returns true if x is a reference keyword (e.g., :ref/id, :ref?/opt, :ref#int/num). Returns false otherwise."
   [x]
-  (or (required-reference? x)
-      (optional-reference? x)))
+  (and (keyword? x)
+       (if-some [ne (namespace x)]
+         (some? (re-matches reference-regex ne))
+         false)))
+
+(defn parse
+  "Parses a reference keyword into a map with :kind (:required or :optional), :referent (keyword), and optionally :type (keyword).
+ Returns nil if k is not a valid reference."
+  [k]
+  (when (reference? k)
+    (let [ns-str (namespace k)
+          name-str (name k)
+          [kind type] (str/split ns-str #"#")
+          kind-key (case kind
+                     "ref" :required
+                     "ref?" :optional)]
+
+      (cond-> {:kind kind-key :referent (keyword name-str)}
+        (some? type)
+        (assoc :type (keyword type))))))
+
+(defn  required-reference?
+  "Returns true if x is a required reference keyword (e.g., :ref/patientId, :ref#int/limit).
+  Otherwise, returns false."
+  [x]
+  (= :required (:kind (parse x))))
+
+(defn optional-reference?
+  "Returns true if x is an optional reference keyword (e.g., :ref?/filter, :ref?#string/term). 
+  Otherwise, returns false."
+  [x]
+  (= :optional (:kind (parse x))))
 
 (defn referent
   "Returns the underlying target keyword (the referent) of a given reference 
