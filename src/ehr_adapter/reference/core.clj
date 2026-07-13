@@ -1,4 +1,4 @@
-(ns ehr-adapter.reference
+(ns ehr-adapter.reference.core
   (:refer-clojure :exclude [resolve])
   (:require [clojure.walk :refer [postwalk]]
             [ehr-adapter.error :as error]))

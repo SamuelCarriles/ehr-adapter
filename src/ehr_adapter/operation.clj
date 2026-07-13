@@ -5,7 +5,7 @@
    [clojure.walk :refer [postwalk]]
    [clojure.set :refer [difference]]
    [ehr-adapter.schema :as schema]
-   [ehr-adapter.reference :as ref]))
+   [ehr-adapter.reference.core :as ref]))
 
 (defn- deep-merge
   "Recursively merges multiple maps. If a key collision occurs and both 

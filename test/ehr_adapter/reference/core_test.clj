@@ -1,6 +1,6 @@
-(ns ehr-adapter.reference-test
+(ns ehr-adapter.reference.core-test
   (:require [clojure.test :refer [deftest is testing]]
-            [ehr-adapter.reference :as ref]))
+            [ehr-adapter.reference.core :as ref]))
 
 (deftest reference?-test
   (testing "Identifies valid required :ref/... keywords"

@@ -6,7 +6,7 @@
    [clojure.string :as str]
    [buddy.sign.jws :as jws]
    [ehr-adapter.error :as error]
-   [ehr-adapter.reference :as ref])
+   [ehr-adapter.reference.core :as ref])
   (:import [org.apache.commons.validator.routines UrlValidator]
            [java.io File]))
 

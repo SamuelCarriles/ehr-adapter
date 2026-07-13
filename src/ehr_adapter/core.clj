@@ -5,7 +5,7 @@
    [ehr-adapter.network :as net]
    [ehr-adapter.http.header :refer [authorization]]
    [ehr-adapter.operation :as op]
-   [ehr-adapter.reference :refer [partial-resolve]]
+   [ehr-adapter.reference.core :refer [partial-resolve]]
    [ehr-adapter.error :as error]))
 
 (defn wrap-handler

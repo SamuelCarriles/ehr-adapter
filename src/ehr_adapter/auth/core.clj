@@ -1,6 +1,6 @@
 (ns ehr-adapter.auth.core
   (:require [ehr-adapter.auth.strategy :as strategy]
-            [ehr-adapter.reference :as ref]
+            [ehr-adapter.reference.core :as ref]
             [ehr-adapter.time :refer [now]]
             [ehr-adapter.http.core :as http]
             [ehr-adapter.error :as error]))
