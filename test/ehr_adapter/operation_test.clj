@@ -226,47 +226,76 @@
                :path ["v1" :ref/patient-id]}]
              (op/flatten-operations ops))))))
 
-(deftest test-transform
-  (testing "Returns value unchanged when transformers vector is empty"
-    (is (= {:a 1} (op/transform {:a 1} []))))
+(deftest test->transformer
+  (testing "Returns identity-like function when transformers vector is empty"
+    (let [transformer (op/->transformer [])]
+      (is (= {:a 1} (transformer {:a 1})))))
 
-  (testing "Applies single transformer"
-    (is (= 6 (op/transform 5 [inc]))))
+  (testing "Composes single transformer"
+    (let [transformer (op/->transformer [inc])]
+      (is (= 6 (transformer 5)))))
 
-  (testing "Chains multiple transformers in order"
-    (is (= "HELLO!" (op/transform "hello" [#(str % "!") str/upper-case]))))
+  (testing "Composes multiple transformers in correct order (last in vector executes first)"
+    (let [transformer (op/->transformer [#(str % "!") str/upper-case])]
+      (is (= "HELLO!" (transformer "hello")))))
 
-  (testing "Works with nil transformers (no-op)"
-    (is (= {:status 200} (op/transform {:status 200} nil)))))
+  (testing "Composes transformers correctly with reverse"
+    (let [transformer (op/->transformer [inc #(* % 2)])]
+      (is (= 12 (transformer 5))))))
 
 (deftest test-compile-with-transformers
-  (testing "Operation with :in transformers modifies context before execution"
+  (testing "Operation with :in transformers composes and stores them correctly"
     (let [op-spec {:name :transform-test
                    :method :get
                    :path "test"
                    :request {:body {:arg :ref/injected}}
                    :transformers {:in [(fn [ctx] (assoc ctx :injected "value"))]}}
           compiled (op/compile op-spec)
-          operation-fn (get-in compiled [:transform-test :handler])
-          ctx {:ehr-adapter/base-url "https://api.test.com"}
-          result (operation-fn ctx identity)]
-      (is (= "value" (get-in result [:body :arg])))))
+          in-transformer (get-in compiled [:transform-test :transformers :in])]
 
-  (testing "Operation with :out transformers modifies response after execution"
+      ;; Transformer is composed and stored
+      (is (fn? in-transformer))
+
+      ;; Transformer works correctly when called
+      (let [ctx {:ehr-adapter/base-url "https://api.test.com"}
+            transformed-ctx (in-transformer ctx)]
+        (is (= "value" (:injected transformed-ctx))))
+
+      ;; Handler does NOT execute the transformer
+      (let [operation-fn (get-in compiled [:transform-test :handler])
+            ctx {:ehr-adapter/base-url "https://api.test.com"
+                 :injected "value"} ;; Simulate transformer already ran
+            result (operation-fn ctx identity)]
+        ;; Now :injected is in ctx, so :ref/injected resolves
+        (is (= "value" (get-in result [:body :arg]))))))
+
+  (testing "Operation with :out transformers composes and stores them correctly"
     (let [op-spec {:name :transform-out-test
                    :method :get
                    :path "test"
                    :transformers {:out [(fn [resp] (assoc resp :transformed true))
                                         (fn [resp] (update resp :status (fnil inc 0)))]}}
           compiled (op/compile op-spec)
-          operation-fn (get-in compiled [:transform-out-test :handler])
-          ctx {:ehr-adapter/base-url "https://api.test.com"}
-          mock-handler (fn [_] {:status 200 :body "OK"})
-          result (operation-fn ctx mock-handler)]
-      (is (= true (:transformed result)))
-      (is (= 201 (:status result)))))
+          out-transformer (get-in compiled [:transform-out-test :transformers :out])]
 
-  (testing "Operation with both :in and :out transformers"
+      ;; Transformer is composed and stored
+      (is (fn? out-transformer))
+
+      ;; Transformer works correctly when called
+      (let [transformed-resp (out-transformer {:status 200 :body "OK"})]
+        (is (= true (:transformed transformed-resp)))
+        (is (= 201 (:status transformed-resp))))
+
+      ;; Handler does NOT execute the transformer
+      (let [operation-fn (get-in compiled [:transform-out-test :handler])
+            ctx {:ehr-adapter/base-url "https://api.test.com"}
+            mock-handler (fn [_] {:status 200 :body "OK"})
+            result (operation-fn ctx mock-handler)]
+        ;; :transformed is not in result because handler doesn't run transformers
+        (is (not (:transformed result)))
+        (is (= 200 (:status result))))))
+
+  (testing "Operation with both :in and :out transformers stores both"
     (let [op-spec {:name :full-transform-test
                    :method :post
                    :path "test"
@@ -274,21 +303,24 @@
                    :transformers {:in [(fn [ctx] (assoc ctx :timestamp "2024-01-01"))]
                                   :out [(fn [resp] (assoc resp :processed true))]}}
           compiled (op/compile op-spec)
-          operation-fn (get-in compiled [:full-transform-test :handler])
-          ctx {:ehr-adapter/base-url "https://api.test.com"}
-          capture-handler (fn [req] {:status 200 :timestamp (get-in req [:body :date])})
-          result (operation-fn ctx capture-handler)]
-      (is (= "2024-01-01" (:timestamp result)))
-      (is (= true (:processed result)))))
+          in-transformer (get-in compiled [:full-transform-test :transformers :in])
+          out-transformer (get-in compiled [:full-transform-test :transformers :out])]
 
-  (testing "Operation without transformers works normally"
+      ;; Both transformers are composed and stored
+      (is (fn? in-transformer))
+      (is (fn? out-transformer))
+
+      ;; Transformers work correctly when called
+      (let [ctx {:ehr-adapter/base-url "https://api.test.com"}
+            transformed-ctx (in-transformer ctx)]
+        (is (= "2024-01-01" (:timestamp transformed-ctx))))
+
+      (let [transformed-resp (out-transformer {:status 200})]
+        (is (= true (:processed transformed-resp))))))
+
+  (testing "Operation without transformers has no :transformers key"
     (let [op-spec {:name :no-transform-test
                    :method :get
                    :path "test"}
-          compiled (op/compile op-spec)
-          operation-fn (get-in compiled [:no-transform-test :handler])
-          ctx {:ehr-adapter/base-url "https://api.test.com"}
-          mock-handler (fn [_] {:status 200 :body "OK"})
-          result (operation-fn ctx mock-handler)]
-      (is (= 200 (:status result)))
-      (is (= "OK" (:body result))))))
+          compiled (op/compile op-spec)]
+      (is (nil? (get-in compiled [:no-transform-test :transformers]))))))

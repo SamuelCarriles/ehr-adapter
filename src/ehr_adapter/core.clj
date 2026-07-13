@@ -10,9 +10,11 @@
 
 (defn wrap-handler
   [{:keys [request-handler middlewares]}]
-  (reduce (fn [handler middleware]
-            (middleware handler))
-          request-handler middlewares))
+  #_(reduce (fn [handler middleware]
+              (middleware handler))
+            request-handler middlewares)
+  (let [wrapper (apply comp (reverse middlewares))]
+    (wrapper request-handler)))
 
 (defn initialize
   "Builds and validates an adapter instance ready for use from a configuration map.
@@ -85,8 +87,11 @@
   "Executes a precompiled operation within an adapter instance.
   
   Before executing the operation, this function:
-  1. Automatically ensures the authentication token is valid (proactive refresh if needed).
-  2. Safely injects authorization headers into the request, preserving any custom headers provided by the user in the context.
+  1. Applies :in transformers to the user-provided context (if defined).
+  2. Automatically ensures the authentication token is valid (proactive refresh if needed).
+  3. Safely injects authorization headers into the request, preserving any custom headers provided by the user in the context.
+  4. Executes the operation handler.
+  5. Applies :out transformers to the HTTP response (if defined).
   
   Args:
   - adapter-instance: The adapter instance created previously with `initialize`.
@@ -94,7 +99,7 @@
   - ctx: (Optional) Map with dynamic bindings and request overrides for this specific execution.
   
   Returns:
-  The resulting HTTP response map from the operation execution.
+  The resulting HTTP response map from the operation execution, after :out transformers have been applied.
   
   Throws:
   - `:unsupported/invoked-operation` if the operation key does not exist in the instance."
@@ -102,12 +107,16 @@
   ([adapter-instance operation-key ctx]
 
    (let [operation-data (get-in adapter-instance [:ehr-adapter/operations operation-key])
-         {:keys [handler auth?]} operation-data
+         {:keys [handler auth? transformers]} operation-data
+         {in-tr :in out-tr :out} transformers
          req-handler (:ehr-adapter/request-handler adapter-instance)
+         ctx (if in-tr (in-tr ctx) ctx)
          ready-ctx (runtime-context adapter-instance ctx auth?)]
      (if (some? handler)
-       (handler ready-ctx req-handler)
-
+       (let [result (handler ready-ctx req-handler)]
+         (if out-tr
+           (out-tr result)
+           result))
        (throw (error/info :unsupported/invoked-operation
                           {:message (format "Unknown operation %s" operation-key)
                            :scope :ehr-adapter.core

@@ -258,6 +258,11 @@
   [:map
    [:handler [:fn {:error/message "the handler must be a compiled Clojure function"} fn?]]
    [:description {:optional true} :string]
+   [:auth? :boolean]
+   [:transformers {:optional true}
+    [:map
+     [:in {:optional true} [:fn {:error/message "the in-transformer must be a compiled Clojure function"} fn?]]
+     [:out {:optional true} [:fn {:error/message "the out-transformer must be a compiled Clojure function"} fn?]]]]
    [:required-keys {:optional true} [:set :keyword]]
    [:optional-keys {:optional true} [:set :keyword]]])
 
