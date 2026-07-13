@@ -10,9 +10,6 @@
 
 (defn wrap-handler
   [{:keys [request-handler middlewares]}]
-  #_(reduce (fn [handler middleware]
-              (middleware handler))
-            request-handler middlewares)
   (let [wrapper (apply comp (reverse middlewares))]
     (wrapper request-handler)))
 
