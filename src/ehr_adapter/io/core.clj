@@ -25,7 +25,7 @@
     (->> path
          (map #(if (keyword? %) (name %) %))
          (str/join ".")
-         (keyword "ref"))))
+         (keyword "ref#fn"))))
 
 (defn walk
   "Recursively walks a value, replacing any function found with the
