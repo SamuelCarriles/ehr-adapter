@@ -44,16 +44,16 @@
 
 (deftest path->ref-test
   (testing "Builds a :ref keyword from a simple path of two keywords"
-    (is (= :ref/network.request-handler
+    (is (= :ref#fn/network.request-handler
            (core/path->ref [:network :request-handler]))))
 
   (testing "Builds a :ref keyword from a path containing a numeric index"
-    (is (= :ref/auth.initial.1.handler
+    (is (= :ref#fn/auth.initial.1.handler
            (core/path->ref [:auth :initial 1 :handler]))))
 
   (testing "Builds a :ref keyword from a single-element path"
-    (is (= :ref/middlewares
-           (core/path->ref [:middlewares]))))
+    (is (= :ref#fn/network.middlewares.0
+           (core/path->ref [:network :middlewares 0]))))
 
   (testing "Returns nil when given an empty path"
     (is (nil? (core/path->ref [])))))
@@ -64,7 +64,7 @@
 
 (deftest walk-test
   (testing "A bare function is replaced by its corresponding :ref"
-    (is (= :ref/network.request-handler
+    (is (= :ref#fn/network.request-handler
            (core/walk mock-http-request-handler [:network :request-handler]))))
 
   (testing "A map without functions is returned unchanged"
@@ -77,7 +77,7 @@
              :options {:request {:query-params {:sandbox true}}}}
           result (core/walk m [:auth :initial 0])]
       (is (= :custom (:type result)))
-      (is (= :ref/auth.initial.0.handler (:handler result)))
+      (is (= :ref#fn/auth.initial.0.handler (:handler result)))
       (is (= {:request {:query-params {:sandbox true}}} (:options result)))))
 
   (testing "A vector with a function at a specific index produces the correct indexed :ref"
@@ -86,7 +86,7 @@
           result (core/walk v [:auth :initial])]
       (is (vector? result))
       (is (= {:type :basic-auth :username "u" :password "p"} (first result)))
-      (is (= :ref/auth.initial.1.handler (get-in result [1 :handler])))))
+      (is (= :ref#fn/auth.initial.1.handler (get-in result [1 :handler])))))
 
   (testing "A vector with no functions inside is returned as a real vector, unchanged"
     (let [v [{:type :basic-auth :username "u" :password "p"}]
@@ -118,11 +118,11 @@
 
                   :auth {:initial [{:type :basic-auth :username "u" :password "p"}]}}
           result (core/->serializable config)]
-      (is (= :ref/network.request-handler (get-in result [:network :request-handler])))
-      (is (= :ref/network.before-retry (get-in result [:network :before-retry])))
+      (is (= :ref#fn/network.request-handler (get-in result [:network :request-handler])))
+      (is (= :ref#fn/network.before-retry (get-in result [:network :before-retry])))
       (is (= 3 (get-in result [:network :retries])))
       (is (= [500 502 503 504] (get-in result [:network :retry-on])))
-      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0])))))
+      (is (= :ref#fn/network.middlewares.0 (get-in result [:network :middlewares 0])))))
 
   (testing "2. Custom auth handler inside :auth :initial is replaced by an indexed :ref"
     (let [config {:domain :epic/hospital-central-prod
@@ -133,7 +133,7 @@
                                     :handler mock-custom-auth-handler
                                     :options {:request {:query-params {:sandbox true}}}}]}}
           result (core/->serializable config)]
-      (is (= :ref/auth.initial.0.handler (get-in result [:auth :initial 0 :handler])))
+      (is (= :ref#fn/auth.initial.0.handler (get-in result [:auth :initial 0 :handler])))
       (is (= :custom (get-in result [:auth :initial 0 :type])))
       (is (= {:request {:query-params {:sandbox true}}} (get-in result [:auth :initial 0 :options])))))
 
@@ -147,7 +147,7 @@
           result (core/->serializable config)]
       (is (= {:type :basic-auth :username "u" :password "p"}
              (get-in result [:auth :initial 0])))
-      (is (= :ref/auth.refresh.0.handler (get-in result [:auth :refresh 0 :handler])))))
+      (is (= :ref#fn/auth.refresh.0.handler (get-in result [:auth :refresh 0 :handler])))))
 
   (testing "4. A non-custom auth layer (no functions inside) is left completely untouched"
     (let [config {:domain :eclinicalworks/tenant-beta
@@ -190,11 +190,11 @@
                                     :client-id "epic-client-123"
                                     :client-secret "client-secret"}]}}
           result (core/->serializable config)]
-      (is (= [:ref/network.middlewares.0 :ref/network.middlewares.1] (get-in result [:network :middlewares])))
-      (is (= :ref/network.request-handler (get-in result [:network :request-handler])))
-      (is (= :ref/network.before-retry (get-in result [:network :before-retry])))
+      (is (= [:ref#fn/network.middlewares.0 :ref#fn/network.middlewares.1] (get-in result [:network :middlewares])))
+      (is (= :ref#fn/network.request-handler (get-in result [:network :request-handler])))
+      (is (= :ref#fn/network.before-retry (get-in result [:network :before-retry])))
       (is (= "epic-client-123" (get-in result [:auth :initial 0 :client-id])))
-      (is (= :ref/auth.initial.1.handler (get-in result [:auth :initial 1 :handler])))
+      (is (= :ref#fn/auth.initial.1.handler (get-in result [:auth :initial 1 :handler])))
       (is (= "refresh_token" (get-in result [:auth :refresh 0 :grant-type])))))
 
   (testing "7. Operation with :transformers :in and :out functions are replaced by indexed :refs"
@@ -209,9 +209,9 @@
                                 :transformers {:in [identity]
                                                :out [identity]}}]}
           result (core/->serializable config)]
-      (is (= :ref/operations.0.transformers.in.0
+      (is (= :ref#fn/operations.0.transformers.in.0
              (get-in result [:operations 0 :transformers :in 0])))
-      (is (= :ref/operations.0.transformers.out.0
+      (is (= :ref#fn/operations.0.transformers.out.0
              (get-in result [:operations 0 :transformers :out 0])))
       (is (= :export-data (get-in result [:operations 0 :name])))))
 
@@ -227,15 +227,15 @@
                                 :transformers {:in [identity vec]
                                                :out [identity str vec]}}]}
           result (core/->serializable config)]
-      (is (= :ref/operations.0.transformers.in.0
+      (is (= :ref#fn/operations.0.transformers.in.0
              (get-in result [:operations 0 :transformers :in 0])))
-      (is (= :ref/operations.0.transformers.in.1
+      (is (= :ref#fn/operations.0.transformers.in.1
              (get-in result [:operations 0 :transformers :in 1])))
-      (is (= :ref/operations.0.transformers.out.0
+      (is (= :ref#fn/operations.0.transformers.out.0
              (get-in result [:operations 0 :transformers :out 0])))
-      (is (= :ref/operations.0.transformers.out.1
+      (is (= :ref#fn/operations.0.transformers.out.1
              (get-in result [:operations 0 :transformers :out 1])))
-      (is (= :ref/operations.0.transformers.out.2
+      (is (= :ref#fn/operations.0.transformers.out.2
              (get-in result [:operations 0 :transformers :out 2])))))
 
   (testing "9. Operation with only :in transformer leaves :out untouched"
@@ -249,7 +249,7 @@
                                 :path "in"
                                 :transformers {:in [identity]}}]}
           result (core/->serializable config)]
-      (is (= :ref/operations.0.transformers.in.0
+      (is (= :ref#fn/operations.0.transformers.in.0
              (get-in result [:operations 0 :transformers :in 0])))
       (is (nil? (get-in result [:operations 0 :transformers :out])))))
 
@@ -269,9 +269,9 @@
                                               :path "op2"
                                               :transformers {:out [str]}}]}]}
           result (core/->serializable config)]
-      (is (= :ref/operations.0.operations.0.transformers.in.0
+      (is (= :ref#fn/operations.0.operations.0.transformers.in.0
              (get-in result [:operations 0 :operations 0 :transformers :in 0])))
-      (is (= :ref/operations.0.operations.1.transformers.out.0
+      (is (= :ref#fn/operations.0.operations.1.transformers.out.0
              (get-in result [:operations 0 :operations 1 :transformers :out 0])))))
 
   (testing "11. Operations without :transformers are left unchanged"
@@ -296,16 +296,16 @@
     (let [result (core/export! base-config {:format :edn})
           parsed (edn/read-string result)]
       (is (string? result))
-      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
-      (is (= :ref/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))
-      (is (= :ref/network.request-handler (get-in parsed [:network :request-handler])))))
+      (is (= :ref#fn/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
+      (is (= :ref#fn/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))
+      (is (= :ref#fn/network.request-handler (get-in parsed [:network :request-handler])))))
 
   (testing "Without :dir, :transit format returns a transit+json string with refs in place of functions"
     (let [result (core/export! base-config {:format :transit})
           parsed (transit/<-string result)]
       (is (string? result))
-      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
-      (is (= :ref/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))))
+      (is (= :ref#fn/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
+      (is (= :ref#fn/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))))
 
   (testing "Throws when the config is invalid (e.g. missing :network)"
     (let [invalid-config (dissoc base-config :network)]
@@ -344,13 +344,13 @@
     (let [file (core/export! base-config {:format :edn :dir test-dir :file-name "roundtrip.edn"})
           file-content (slurp file)
           parsed (edn/read-string file-content)]
-      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
-      (is (= :ref/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))))
+      (is (= :ref#fn/network.middlewares.0 (get-in parsed [:network :middlewares 0])))
+      (is (= :ref#fn/auth.initial.0.handler (get-in parsed [:auth :initial 0 :handler])))))
 
   (testing "Transit format written to disk produces a valid transit+json file"
     (let [file (core/export! base-config {:format :transit :dir test-dir :file-name "roundtrip.json"})
           parsed (transit/<-string (slurp file))]
-      (is (= :ref/network.middlewares.0 (get-in parsed [:network :middlewares 0]))))))
+      (is (= :ref#fn/network.middlewares.0 (get-in parsed [:network :middlewares 0]))))))
 
 ;; =============================================================================
 ;; ->file-name Tests (via the public surface, indirectly through export!)
@@ -375,27 +375,27 @@
   (testing "Reads back an EDN file when a java.io.File is passed directly via :file"
     (let [written (core/export! base-config {:format :edn :dir test-dir :file-name "via-file.edn"})
           result (core/import {:format :edn :file written})]
-      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0])))
-      (is (= :ref/auth.initial.0.handler (get-in result [:auth :initial 0 :handler])))))
+      (is (= :ref#fn/network.middlewares.0 (get-in result [:network :middlewares 0])))
+      (is (= :ref#fn/auth.initial.0.handler (get-in result [:auth :initial 0 :handler])))))
 
   (testing "Reads back a transit+json file when a java.io.File is passed directly via :file"
     (let [written (core/export! base-config {:format :transit :dir test-dir :file-name "via-file.json"})
           result (core/import {:format :transit :file written})]
-      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0]))))))
+      (is (= :ref#fn/network.middlewares.0 (get-in result [:network :middlewares 0]))))))
 
 (deftest import-with-dir-and-file-name-test
   (testing "Reads back a file located by :dir + :file-name"
     (core/export! base-config {:format :edn :dir test-dir :file-name "via-dir.edn"})
     (let [result (core/import {:format :edn :dir test-dir :file-name "via-dir.edn"})]
-      (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0])))
-      (is (= :ref/network.request-handler (get-in result [:network :request-handler]))))))
+      (is (= :ref#fn/network.middlewares.0 (get-in result [:network :middlewares 0])))
+      (is (= :ref#fn/network.request-handler (get-in result [:network :request-handler]))))))
 
 (deftest import-with-file-name-only-test
   (testing "Reads back a file located by :file-name alone, looked up in the current working directory"
     (let [file-name "via-cwd.edn"]
       (core/export! base-config {:format :edn :file-name file-name})
       (let [result (core/import {:format :edn :file-name file-name})]
-        (is (= :ref/network.middlewares.0 (get-in result [:network :middlewares 0]))))
+        (is (= :ref#fn/network.middlewares.0 (get-in result [:network :middlewares 0]))))
       (io/delete-file (io/file file-name) true))))
 
 (deftest import-missing-file-test

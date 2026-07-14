@@ -207,3 +207,11 @@
           (is (vector? (get-in data [:details :expected])))
           (is (some #{:integer :string :uuid} (get-in data [:details :expected])))
           (is (not (some #{:default :unknown-type} (get-in data [:details :expected])))))))))
+
+(deftest validate-fn-test
+  (testing "valid clojure fn"
+    (is (type/validate {:value identity :kind :required :referent :fn :type :fn})))
+  (testing "no clojure fn"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"must be of type: :fn"
+                          (type/validate {:value "no fn" :kind :required :referent :fn :type :fn})))))

@@ -33,6 +33,10 @@
                       :value type
                       :expected (supported-types)})))
 
+(defmethod validate :fn
+  [ref-data]
+  (check ref-data fn?))
+
 (defmethod validate :integer
   [ref-data]
   (check ref-data integer?))
