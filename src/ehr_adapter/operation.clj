@@ -3,9 +3,9 @@
   (:require
    [clojure.string :as str]
    [clojure.walk :refer [postwalk]]
-   [clojure.set :refer [difference]]
+   [clojure.set :refer [difference rename-keys]]
    [ehr-adapter.schema :as schema]
-   [ehr-adapter.reference :as ref]))
+   [ehr-adapter.reference.core :as ref]))
 
 (defn- deep-merge
   "Recursively merges multiple maps. If a key collision occurs and both 
@@ -59,14 +59,19 @@
         resolved-path (ref/resolve ctx path)]
     (str/join "/" (into [base-url] resolved-path))))
 
-(defn clasify-ref-keys
+(defn classify-ref-keys
   "Groups a collection of reference keywords into a map of :required-keys 
    and :optional-keys based on their namespace. If a key is marked as both 
    required and optional, requirement takes priority."
   [refs]
   (let [keys-group (group-by ref/required-reference? refs)
-        req-k (->> (get keys-group true) (map ref/referent) set)
-        opt-k (->> (get keys-group false) (map ref/referent) set)
+        get-data #(-> %
+                      ref/parse
+                      (select-keys [:referent :type])
+                      (rename-keys {:referent :key}))
+        data-set #(set (map get-data %))
+        req-k (->> (get keys-group true) data-set)
+        opt-k (->> (get keys-group false) data-set)
         filter-opt-k (difference opt-k req-k)]
     (cond-> {:required-keys req-k}
       (seq filter-opt-k)
@@ -115,7 +120,7 @@
 
     (let [{:keys [in out]} transformers
           op-name (:name op)
-          ref-keys (clasify-ref-keys (ref/extract op))
+          ref-keys (classify-ref-keys (ref/extract op))
           op-map (cond-> (merge {:handler operation :auth? auth?} ref-keys)
 
                    (seq in)

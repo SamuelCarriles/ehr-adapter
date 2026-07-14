@@ -1,27 +1,48 @@
-(ns ehr-adapter.reference
-  (:refer-clojure :exclude [resolve])
-  (:require [clojure.walk :refer [postwalk]]
-            [ehr-adapter.error :as error]))
+(ns ehr-adapter.reference.core
+  (:refer-clojure :exclude [resolve type])
+  (:require
+   [clojure.string :as str]
+   [clojure.walk :refer [postwalk]]
+   [ehr-adapter.reference.type :as ref-type]
+   [ehr-adapter.error :as error]))
 
-(defn  required-reference?
-  "Returns true if x is a keyword with the namespace 'ref' 
-  (e.g., :ref/patientId). Otherwise, returns false."
-  [x]
-  (and (keyword? x)
-       (= "ref" (namespace x))))
-
-(defn optional-reference?
-  "Returns true if x is a keyword with the namespace 'ref?' 
-  (e.g., :ref/patientId). Otherwise, returns false."
-  [x]
-  (and (keyword? x)
-       (= "ref?" (namespace x))))
+(def ^:private ref-regex #"^ref(\?|#.+|\?#.+)?$")
 
 (defn reference?
-
+  "Returns true if x is a reference keyword (e.g., :ref/id, :ref?/opt, :ref#int/num). Returns false otherwise."
   [x]
-  (or (required-reference? x)
-      (optional-reference? x)))
+  (and (keyword? x)
+       (if-some [ne (namespace x)]
+         (some? (re-matches ref-regex ne))
+         false)))
+
+(defn parse
+  "Parses a reference keyword into a map with :kind (:required or :optional), :referent (keyword), and optionally :type (keyword).
+ Returns nil if k is not a valid reference."
+  [k]
+  (when (reference? k)
+    (let [ns-str (namespace k)
+          name-str (name k)
+          [kind type] (str/split ns-str #"#")
+          kind-key (case kind
+                     "ref" :required
+                     "ref?" :optional)]
+
+      (cond-> {:kind kind-key :referent (keyword name-str)}
+        (some? type)
+        (assoc :type (keyword type))))))
+
+(defn  required-reference?
+  "Returns true if x is a required reference keyword (e.g., :ref/patientId, :ref#int/limit).
+  Otherwise, returns false."
+  [x]
+  (= :required (:kind (parse x))))
+
+(defn optional-reference?
+  "Returns true if x is an optional reference keyword (e.g., :ref?/filter, :ref?#string/term). 
+  Otherwise, returns false."
+  [x]
+  (= :optional (:kind (parse x))))
 
 (defn referent
   "Returns the underlying target keyword (the referent) of a given reference 
@@ -32,8 +53,7 @@
      (referent :ref?/patientId) ;; => :patientId
      (referent :plain-keyword)  ;; => nil"
   [ref]
-  (when (reference? ref)
-    (keyword (name ref))))
+  (:referent (parse ref)))
 
 (defn validate-ref-bindings
   "Returns true when ref-bindings is a Clojure map, else throws :invalid/type error"
@@ -49,10 +69,12 @@
 
 (defn get-ref
   [ref-bindings ref]
-  (->> ref
-       name
-       keyword
-       (get ref-bindings)))
+  (let [ref-data (parse ref)
+        value (get ref-bindings (:referent ref-data))
+        full-ref-data (assoc ref-data :value value)]
+    (if (some? (:type ref-data))
+      (ref-type/validate full-ref-data)
+      value)))
 
 (defn resolve
   "Recursively traverses the given `form` (maps, vectors, lists, etc.) 
@@ -129,3 +151,28 @@
      x)
     (persistent! refs)))
 
+(defn check
+  "Validates that all references in data structure x have unique referents.
+   
+   Throws :invalid/reference if the same referent appears with different 
+   specifications (e.g., :ref/id and :ref?/id, or :ref#int/x and :ref#string/x).
+   
+   Returns x unchanged if validation passes.
+   
+   Example:
+     (check {:path [:ref/id] :query {:name :ref?/name}})
+     ;; => {:path [:ref/id] :query {:name :ref?/name}}
+     
+     (check {:path [:ref/id] :query {:id :ref?/id}})
+     ;; => throws ExceptionInfo"
+  [x]
+  (let [refs (extract x)
+        freq  (frequencies (map referent refs))]
+    (if-let [ref (some #(when (> (val %) 1) (key %)) freq)]
+      (throw (error/info :invalid/reference
+                         {:message (format "The referent %s appears with different specs" ref)
+                          :scope :ehr-adapter.reference.core
+                          :operation :check-references
+                          :reference ref
+                          :context (filter #(= ref (referent %)) refs)}))
+      x)))

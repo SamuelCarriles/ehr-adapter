@@ -356,3 +356,64 @@
              (:body result)))
       (is (nil? (:transformed result)))
       (is (nil? (:processed result))))))
+
+(deftest initialize-typed-references-test
+  (testing "Successfully initializes and resolves typed references in config and operations"
+    (let [call-log (atom [])
+          mock-handler (make-mock-http-handler call-log)
+          config {:domain :test/typed-refs
+                  :base-url :ref#string/base-url
+                  :network {:request-handler mock-handler
+                            :middlewares [mock-middleware]}
+                  :operations [{:name :get-patient
+                                :path ["patients" :ref#pos-int/patient-id]
+                                :method :get}]}
+          init-ctx {:base-url "https://api.typed-clinic.com/v1"
+                    :patient-id 999}
+          instance (core/initialize init-ctx config)]
+
+      (is (map? instance))
+      (is (contains? instance :ehr-adapter/operations))
+
+      (core/invoke instance :get-patient)
+      (let [api-req (first @call-log)]
+        (is (= "https://api.typed-clinic.com/v1/patients/999" (:url api-req))))))
+
+  (testing "Throws :invalid/type during initialize if typed reference in config has wrong type"
+    (let [mock-handler (make-mock-http-handler (atom []))
+          config {:domain :test/typed-refs-fail
+                  :base-url :ref#string/base-url
+                  :network {:request-handler mock-handler}
+                  :operations [{:name :get-patient
+                                :path ["patients" :ref#pos-int/patient-id]
+                                :method :get}]}
+          init-ctx {:base-url "https://api.test.com"
+                    :patient-id "not-a-number"}]
+
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"must be of type: :pos-int"
+                            (core/initialize init-ctx config))))))
+
+(deftest initialize-incoherent-references-test
+  (testing "Throws :invalid/reference fast when the same referent has conflicting specs"
+    (let [mock-handler (make-mock-http-handler (atom []))
+          config {:domain :test/incoherent
+                  :base-url "https://api.test.com"
+                  :network {:request-handler mock-handler}
+                  :operations [{:name :get-patient
+                                :path ["patients" :ref/patient-id]
+                                :method :get}
+                               {:name :delete-patient
+                                :path ["patients" :ref?/patient-id] ;; Contradicts :ref/patient-id
+                                :method :delete}
+                               {:name :get-record
+                                :path ["records" :ref#string/record-id]
+                                :method :get}
+                               {:name :update-record
+                                :path ["records" :ref#pos-int/record-id] ;; Contradicts :ref#string/record-id
+                                :method :put}]}
+          init-ctx {}]
+
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"appears with different specs"
+                            (core/initialize init-ctx config))))))

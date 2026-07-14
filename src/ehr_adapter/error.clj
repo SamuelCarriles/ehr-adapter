@@ -91,6 +91,14 @@
                     :details {:invoked-operation value
                               :expected expected}}))
 
+(defmethod info :unsupported/reference-type
+  [code {:keys [scope message operation value expected]}]
+  (ex-info message {:scope scope
+                    :operation operation
+                    :code code
+                    :details {:type value
+                              :expected expected}}))
+
 (defmethod info :missing/field
   [code {:keys [scope operation message field]}]
   (ex-info message

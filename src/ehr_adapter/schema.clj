@@ -6,7 +6,7 @@
    [clojure.string :as str]
    [buddy.sign.jws :as jws]
    [ehr-adapter.error :as error]
-   [ehr-adapter.reference :as ref])
+   [ehr-adapter.reference.core :as ref])
   (:import [org.apache.commons.validator.routines UrlValidator]
            [java.io File]))
 
@@ -39,11 +39,18 @@
 
 (defn path-segment?
   [segment]
-  (or (ref/required-reference? segment)
-      (and
-       (not-blank-str? segment)
-       (not (or (str/ends-with? segment "/")
-                (str/starts-with? segment "/"))))))
+  (or
+   (ref/required-reference? segment)
+   (and
+    (not (coll? segment))
+    (not (seq? segment))
+    (not (string? segment))
+    (some? segment))
+
+   (and
+    (not-blank-str? segment)
+    (not (or (str/ends-with? segment "/")
+             (str/starts-with? segment "/"))))))
 
 (defn supported-alg?
   [alg]
@@ -263,8 +270,8 @@
     [:map
      [:in {:optional true} [:fn {:error/message "the in-transformer must be a compiled Clojure function"} fn?]]
      [:out {:optional true} [:fn {:error/message "the out-transformer must be a compiled Clojure function"} fn?]]]]
-   [:required-keys {:optional true} [:set :keyword]]
-   [:optional-keys {:optional true} [:set :keyword]]])
+   [:required-keys {:optional true} [:set [:map-of :keyword :any]]]
+   [:optional-keys {:optional true} [:set [:map-of :keyword :any]]]])
 
 (def AdapterInstance
   [:map {:closed true}
