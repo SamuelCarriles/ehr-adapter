@@ -151,3 +151,28 @@
      x)
     (persistent! refs)))
 
+(defn check
+  "Validates that all references in data structure x have unique referents.
+   
+   Throws :invalid/reference if the same referent appears with different 
+   specifications (e.g., :ref/id and :ref?/id, or :ref#int/x and :ref#string/x).
+   
+   Returns x unchanged if validation passes.
+   
+   Example:
+     (check {:path [:ref/id] :query {:name :ref?/name}})
+     ;; => {:path [:ref/id] :query {:name :ref?/name}}
+     
+     (check {:path [:ref/id] :query {:id :ref?/id}})
+     ;; => throws ExceptionInfo"
+  [x]
+  (let [refs (extract x)
+        freq  (frequencies (map referent refs))]
+    (if-let [ref (some #(when (> (val %) 1) (key %)) freq)]
+      (throw (error/info :invalid/reference
+                         {:message (format "The referent %s appears with different specs" ref)
+                          :scope :ehr-adapter.reference.core
+                          :operation :check-references
+                          :reference ref
+                          :context (filter #(= ref (referent %)) refs)}))
+      x)))

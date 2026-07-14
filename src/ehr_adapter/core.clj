@@ -5,7 +5,7 @@
    [ehr-adapter.network :as net]
    [ehr-adapter.http.header :refer [authorization]]
    [ehr-adapter.operation :as op]
-   [ehr-adapter.reference.core :refer [partial-resolve]]
+   [ehr-adapter.reference.core :refer [check partial-resolve]]
    [ehr-adapter.error :as error]))
 
 (defn wrap-handler
@@ -30,7 +30,7 @@
   A map validated as `AdapterInstance`, ready to be used with `invoke`."
   ([adapter-config] (initialize {} adapter-config))
   ([ctx adapter-config]
-   (let [partial-resolved-cfg (->> adapter-config (partial-resolve ctx) schema/validate-adapter-config)
+   (let [partial-resolved-cfg (->> adapter-config check (partial-resolve ctx) schema/validate-adapter-config)
          {:keys [domain base-url auth network operations]} partial-resolved-cfg
          wrapped-handler (-> (wrap-handler network)
                              (net/with-retries network)

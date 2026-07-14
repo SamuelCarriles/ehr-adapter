@@ -18,14 +18,20 @@
 
 (defmulti validate (fn [m] (:type m)))
 
+(defn supported-types []
+  (-> (methods validate)
+      (dissoc :default)
+      keys
+      vec))
+
 (defmethod validate :default
   [{:keys [type]}]
   (throw (error/info :unsupported/reference-type
-                     {:message (format "The type %s is not supported. Implement a specific method of ehr-adapter.reference.type/validate for it or try with default supported types." type)
+                     {:message (format "The type %s is not supported. Either implement a method for ehr-adapter.reference.type/validate or use a supported type." type)
                       :scope :ehr-adapter.reference.type
                       :operation :validate-referent-value
                       :value type
-                      :expected "un vector con los nombres de los tipos soportados, no sé si se puede acceder a todos los metodos de un multi para sacar las llaves que matchean"})))
+                      :expected (supported-types)})))
 
 (defmethod validate :integer
   [ref-data]

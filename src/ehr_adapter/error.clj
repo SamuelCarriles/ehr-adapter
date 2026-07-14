@@ -96,7 +96,7 @@
   (ex-info message {:scope scope
                     :operation operation
                     :code code
-                    :details {:invoked-operation value
+                    :details {:type value
                               :expected expected}}))
 
 (defmethod info :missing/field

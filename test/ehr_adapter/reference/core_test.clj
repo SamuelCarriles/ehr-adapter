@@ -164,3 +164,56 @@
            (ref/extract {:age :ref#pos-int/age
                          :name :ref?#string/name
                          :id :ref/uuid})))))
+
+(deftest check-reference-coherence-test
+  (testing "Returns x when all referents are unique"
+    (let [x {:path [:ref/patient-id]
+             :query {:name :ref?/name}
+             :body {:age :ref#pos-int/age}}]
+      (is (= x (ref/check x)))))
+
+  (testing "Throws when same referent appears with different kind (required vs optional)"
+    (let [x {:path [:ref/patient-id]
+             :query {:id :ref?/patient-id}}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"The referent :patient-id appears with different specs"
+                            (ref/check x)))))
+
+  (testing "Throws when same referent appears with different types"
+    (let [x {:path [:ref#int/patient-id]
+             :query {:id :ref#string/patient-id}}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"The referent :patient-id appears with different specs"
+                            (ref/check x)))))
+
+  (testing "Throws when same referent appears with different kind and type"
+    (let [x {:path [:ref#int/patient-id]
+             :query {:id :ref?#string/patient-id}}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"The referent :patient-id appears with different specs"
+                            (ref/check x)))))
+
+  (testing "Error includes context with all conflicting references"
+    (let [x {:path [:ref#int/patient-id]
+             :query {:id :ref?#string/patient-id}}]
+      (try
+        (ref/check x)
+        (is false "Expected exception")
+        (catch clojure.lang.ExceptionInfo e
+          (let [data (ex-data e)]
+            (is (= :patient-id (get-in data [:details :reference])))
+            (is (= #{:ref#int/patient-id :ref?#string/patient-id}
+                   (set (get-in data [:details :context])))))))))
+
+  (testing "Allows identical references (set deduplication)"
+    (let [x {:path [:ref/patient-id]
+             :body {:id :ref/patient-id}}]
+      (is (= x (ref/check x)))))
+
+  (testing "Returns x for empty structure"
+    (is (= {} (ref/check {}))))
+
+  (testing "Returns x when no references present"
+    (let [x {:path ["api" "v1" "Patient"]
+             :body {:name "John"}}]
+      (is (= x (ref/check x))))))

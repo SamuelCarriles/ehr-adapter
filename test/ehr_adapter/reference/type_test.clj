@@ -188,3 +188,22 @@
                           #"must be of type: :local-date-time-str"
                           (type/validate {:value "not-a-datetime" :kind :required :referent :datetime :type :local-date-time-str})))))
 
+(deftest validate-unsupported-type-test
+  (testing "Throws :unsupported/reference-type for unknown types"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"The type :foo-bar is not supported"
+                          (type/validate {:value "some-value" :kind :required :referent :id :type :foo-bar}))))
+
+  (testing "Error data includes expected supported types"
+    (try
+      (type/validate {:value 123 :kind :required :referent :test :type :unknown-type})
+      (is false "Expected exception")
+      (catch clojure.lang.ExceptionInfo e
+        (let [data (ex-data e)]
+          (is (= :unsupported/reference-type (:code data)))
+          (is (= :unknown-type (get-in data [:details :type])))
+          (is (= :ehr-adapter.reference.type (:scope data)))
+          (is (= :validate-referent-value (:operation data)))
+          (is (vector? (get-in data [:details :expected])))
+          (is (some #{:integer :string :uuid} (get-in data [:details :expected])))
+          (is (not (some #{:default :unknown-type} (get-in data [:details :expected])))))))))

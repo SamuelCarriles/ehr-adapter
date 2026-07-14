@@ -19,23 +19,24 @@
       (is (= "https://api.advancedmd.com"
              (op/full-url ctx nil))))))
 
-(deftest test-clasify-ref-keys
+(deftest test-classify-ref-keys
   (testing "Basic classification of required and optional keys"
-    (let [refs #{:ref/patientId :ref?/facilityId :ref?/appointmentId}]
-      (is (= {:required-keys #{:patientId}
-              :optional-keys #{:facilityId :appointmentId}}
-             (op/clasify-ref-keys refs)))))
-
-  (testing "Requirement takes precedence when the same key is both required and optional"
-    (let [refs #{:ref/patientId :ref?/patientId :ref?/facilityId}]
-      (is (= {:required-keys #{:patientId}
-              :optional-keys #{:facilityId}}
-             (op/clasify-ref-keys refs)))))
+    (let [refs #{:ref/patientId :ref?/facilityId :ref?#string/appointmentId}]
+      (is (= {:required-keys #{{:key :patientId}}
+              :optional-keys #{{:key :facilityId}
+                               {:key :appointmentId :type :string}}}
+             (op/classify-ref-keys refs)))))
 
   (testing "Excludes :optional-keys key entirely from the map if no optional keys remain"
     (let [refs #{:ref/patientId}]
-      (is (= {:required-keys #{:patientId}}
-             (op/clasify-ref-keys refs))))))
+      (is (= {:required-keys #{{:key :patientId}}}
+             (op/classify-ref-keys refs)))))
+
+  (testing "Classification includes type information when present"
+    (let [refs #{:ref#pos-int/age :ref?#string/name}]
+      (is (= {:required-keys #{{:key :age :type :pos-int}}
+              :optional-keys #{{:key :name :type :string}}}
+             (op/classify-ref-keys refs))))))
 
 (deftest test-compile-and-execution
   (let [op-spec {:name :get-patient-history
@@ -51,7 +52,8 @@
     (testing "Compiler output metadata verification"
       (is (fn? operation-fn))
       (is (= "Fetch patient clinical history" (get-in compiled [:get-patient-history :description])))
-      (is (= #{:patientId} (get-in compiled [:get-patient-history :required-keys]))))
+      (is (= #{{:key :patientId}}
+             (get-in compiled [:get-patient-history :required-keys]))))
 
     (testing "Throws ExceptionInfo when the generated URL is invalid"
       (let [op-spec {:name :bad-url-op
