@@ -1,18 +1,19 @@
 (ns ehr-adapter.reference.core
-  (:refer-clojure :exclude [resolve])
+  (:refer-clojure :exclude [resolve type])
   (:require
    [clojure.string :as str]
    [clojure.walk :refer [postwalk]]
+   [ehr-adapter.reference.type :as ref-type]
    [ehr-adapter.error :as error]))
 
-(def ^:private reference-regex #"^ref(\?|#.+|\?#.+)?$")
+(def ^:private ref-regex #"^ref(\?|#.+|\?#.+)?$")
 
 (defn reference?
   "Returns true if x is a reference keyword (e.g., :ref/id, :ref?/opt, :ref#int/num). Returns false otherwise."
   [x]
   (and (keyword? x)
        (if-some [ne (namespace x)]
-         (some? (re-matches reference-regex ne))
+         (some? (re-matches ref-regex ne))
          false)))
 
 (defn parse
@@ -52,8 +53,7 @@
      (referent :ref?/patientId) ;; => :patientId
      (referent :plain-keyword)  ;; => nil"
   [ref]
-  (when (reference? ref)
-    (keyword (name ref))))
+  (:referent (parse ref)))
 
 (defn validate-ref-bindings
   "Returns true when ref-bindings is a Clojure map, else throws :invalid/type error"
@@ -69,10 +69,12 @@
 
 (defn get-ref
   [ref-bindings ref]
-  (->> ref
-       name
-       keyword
-       (get ref-bindings)))
+  (let [ref-data (parse ref)
+        value (get ref-bindings (:referent ref-data))
+        full-ref-data (assoc ref-data :value value)]
+    (if (some? (:type ref-data))
+      (ref-type/validate full-ref-data)
+      value)))
 
 (defn resolve
   "Recursively traverses the given `form` (maps, vectors, lists, etc.) 

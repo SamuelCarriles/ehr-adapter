@@ -18,7 +18,6 @@
     (is (false? (ref/reference? :ref#/age)))
     (is (true? (ref/reference? :ref?#string/code)))
     (is (false? (ref/reference? :ref?#/code))))
-  ;; -----------------------------------------------------------
 
   (testing "Rejects keywords from other namespaces or without namespace"
     (is (false? (ref/required-reference? :patient/id)))
@@ -29,6 +28,19 @@
     (is (false? (ref/required-reference? "ref/patientId")))
     (is (false? (ref/required-reference? 123)))
     (is (false? (ref/required-reference? nil)))))
+
+(deftest get-ref-test
+  (testing "Resolves and validates a typed required reference successfully"
+    (is (= 42 (ref/get-ref {:age 42} :ref#pos-int/age)))
+    (is (= "active" (ref/get-ref {:status "active"} :ref#string/status))))
+
+  (testing "Throws :invalid/type when typed reference value does not match the type"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"must be of type: :pos-int"
+                          (ref/get-ref {:age "forty-two"} :ref#pos-int/age))))
+
+  (testing "Returns nil for missing optional typed reference without throwing"
+    (is (nil? (ref/get-ref {} :ref?#string/name)))))
 
 (deftest resolve-test
   (testing "Successful resolution of references"
@@ -57,7 +69,6 @@
           template {:id :ref/id :name :ref?/name}]
       (is (= {:id "123" :name nil}
              (ref/resolve bindings template)))))
-  ;; -----------------------------------------------------------
 
   (testing "Throws ExceptionInfo when a required reference cannot be resolved"
     (let [bindings {:wrongKey "value"}
@@ -72,7 +83,21 @@
             (is (= "The reference :ref/missingId can't be resolved" ex-msg))
             (is (= :invalid/reference (:code ex-meta)))
             (is (= template (get-in ex-meta [:details :context])))
-            (is (= bindings (get-in ex-meta [:details :ref-bindings])))))))))
+            (is (= bindings (get-in ex-meta [:details :ref-bindings]))))))))
+
+  (testing "Resolves typed references correctly within nested structures"
+    (let [bindings {:age 30 :active true}
+          template {:patient {:age :ref#pos-int/age
+                              :active :ref#boolean/active}}]
+      (is (= {:patient {:age 30 :active true}}
+             (ref/resolve bindings template)))))
+
+  (testing "Throws :invalid/type when a required typed reference has the wrong type during resolve"
+    (let [bindings {:age "thirty"}
+          template {:patient {:age :ref#pos-int/age}}]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"must be of type: :pos-int"
+                            (ref/resolve bindings template))))))
 
 (deftest partial-resolve-test
   (testing "Resolves available references and leaves missing ones intact"
@@ -93,6 +118,18 @@
     (let [bindings {:id "123"}
           template {:id :ref/id :name :ref?/name :status :ref?/status}]
       (is (= {:id "123" :name :ref?/name :status :ref?/status}
+             (ref/partial-resolve bindings template)))))
+
+  (testing "Resolves valid typed references and leaves missing optional typed references intact"
+    (let [bindings {:age 25}
+          template {:age :ref#pos-int/age :name :ref?#string/name}]
+      (is (= {:age 25 :name :ref?#string/name}
+             (ref/partial-resolve bindings template)))))
+
+  (testing "Leaves missing required typed references intact in partial-resolve"
+    (let [bindings {}
+          template {:id :ref#pos-int/id}]
+      (is (= {:id :ref#pos-int/id}
              (ref/partial-resolve bindings template))))))
 ;; -----------------------------------------------------------
 
@@ -120,4 +157,10 @@
     (let [result (ref/extract {:id :ref/user-id :name :ref?/user-name})]
       (is (set? result))
       (is (contains? result :ref/user-id))
-      (is (contains? result :ref?/user-name)))))
+      (is (contains? result :ref?/user-name))))
+
+  (testing "Extracts typed references (required and optional) correctly"
+    (is (= #{:ref#pos-int/age :ref?#string/name :ref/uuid}
+           (ref/extract {:age :ref#pos-int/age
+                         :name :ref?#string/name
+                         :id :ref/uuid})))))

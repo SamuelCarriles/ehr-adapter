@@ -15,9 +15,7 @@
     (is (nil? (type/check {:value nil :kind :optional :referent :test :type :integer} integer?))))
 
   (testing "nil value with required kind throws"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                          #"The reference value for :test must be of type: :integer"
-                          (type/check {:value nil :kind :required :referent :test :type :integer} integer?))))
+    (is (nil? (type/check {:value nil :kind :required :referent :test :type :integer} integer?))))
 
   (testing "invalid value with required kind throws"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo
@@ -25,7 +23,9 @@
                           (type/check {:value "not-an-int" :kind :required :referent :test :type :integer} integer?))))
 
   (testing "invalid value with optional kind returns nil"
-    (is (nil? (type/check {:value "not-an-int" :kind :optional :referent :test :type :integer} integer?)))))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                          #"must be of type: :integer"
+                          (type/check {:value "not-an-int" :kind :optional :referent :test :type :integer} integer?)))))
 
 (deftest validate-integer-test
   (testing "valid integer"
@@ -188,12 +188,3 @@
                           #"must be of type: :local-date-time-str"
                           (type/validate {:value "not-a-datetime" :kind :required :referent :datetime :type :local-date-time-str})))))
 
-(deftest optional-references-test
-  (testing "optional with nil value returns nil"
-    (is (nil? (type/validate {:value nil :kind :optional :referent :id :type :integer}))))
-
-  (testing "optional with invalid value returns nil"
-    (is (nil? (type/validate {:value "not-an-int" :kind :optional :referent :id :type :integer}))))
-
-  (testing "optional with valid value returns value"
-    (is (= 42 (type/validate {:value 42 :kind :optional :referent :id :type :integer})))))

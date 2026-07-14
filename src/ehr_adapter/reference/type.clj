@@ -1,29 +1,39 @@
 (ns ehr-adapter.reference.type
+  (:refer-clojure :exclude [type])
   (:require [ehr-adapter.error :as error])
   (:import
    [java.util Date]
    [java.time Instant LocalDate LocalDateTime]))
 
-(defn check [ref-data validation-fn]
-  (let [{:keys [value kind referent type]} ref-data
-        valid? (boolean (validation-fn value))]
-    (cond
-      (true? valid?) value
-      (and (false? valid?)
-           (= :required kind))
+(defn check [{:keys [value referent type]} validation-fn]
+  (when (some? value)
+    (if (validation-fn value)
+      value
       (throw (error/info :invalid/type
                          {:message (format "The reference value for %s must be of type: %s" referent type)
                           :scope :ehr-adapter.reference.type
                           :operation :validate-reference-type
                           :value value
-                          :expected type}))
-      :else nil)))
+                          :expected type})))))
 
 (defmulti validate (fn [m] (:type m)))
+
+(defmethod validate :default
+  [{:keys [type]}]
+  (throw (error/info :unsupported/reference-type
+                     {:message (format "The type %s is not supported. Implement a specific method of ehr-adapter.reference.type/validate for it or try with default supported types." type)
+                      :scope :ehr-adapter.reference.type
+                      :operation :validate-referent-value
+                      :value type
+                      :expected "un vector con los nombres de los tipos soportados, no sé si se puede acceder a todos los metodos de un multi para sacar las llaves que matchean"})))
 
 (defmethod validate :integer
   [ref-data]
   (check ref-data integer?))
+
+(defmethod validate :int
+  [ref-data]
+  (check ref-data int?))
 
 (defmethod validate :pos-int
   [ref-data]
