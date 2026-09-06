@@ -52,7 +52,9 @@
   "Executes a user-defined custom authentication strategy.
   Invokes the provided handler function passing the options map and the http-client."
   [{:keys [handler options]} request-handler]
-  (handler options request-handler))
+  (if handler
+    (handler options request-handler)
+    options))
 
 (defmethod execute :custom
   [layer request-handler]

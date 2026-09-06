@@ -62,7 +62,13 @@
           result         (execute layer mock-client)]
 
       (is (= {:custom-prop "hello" :request {:timeout 1000} :custom-auth-applied? true}
-             result)))))
+             result))))
+  (testing "Returns options when handler is not provided"
+    (let [layer {:type :custom
+                 :options {:token "example-token"}}
+          mock-client identity
+          result (execute layer mock-client)]
+      (is (= {:token "example-token"} result)))))
 
 ;; =============================================================================
 ;; 4. OAUTH2 STRATEGY TESTS
