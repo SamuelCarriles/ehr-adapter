@@ -340,7 +340,7 @@
 
 (defn validate-mime-code-map
   [mime-code-map]
-  (validate-schema MimeCodeMap mime-code-map "Invalid Mime code map"))
+  (validate-schema MimeCodeMap mime-code-map "Invalid MIME code map"))
 
 (defn validate-jwk
   [jwk]
