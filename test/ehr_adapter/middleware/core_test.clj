@@ -9,10 +9,9 @@
              (middleware/normalize [middleware])))))
 
   (testing "Applies middleware options"
-    (let [middleware (fn [option]
-                       (fn [handler]
-                         (fn [req]
-                           (handler (assoc req :option option)))))
+    (let [middleware (fn [handler option]
+                       (fn [req]
+                         (handler (assoc req :option option))))
           normalized (middleware/normalize [[middleware :value]])
           middleware' (first normalized)
           handler (middleware' identity)]
@@ -36,10 +35,9 @@
   (testing "Supports middleware with options"
     (let [handler (fn [req]
                     (assoc req :handled true))
-          middleware (fn [option]
-                       (fn [handler]
-                         (fn [req]
-                           (handler (assoc req :option option)))))
+          middleware (fn [handler option]
+                       (fn [req]
+                         (handler (assoc req :option option))))
           wrapped (middleware/wrap-handler
                    {:request-handler handler
                     :middlewares [[middleware :value]]})]

@@ -4,10 +4,12 @@
   "Normalizes middleware definitions into middleware functions."
   [middlewares]
   (map
-   #(if (vector? %)
-      (let [[f & args] %]
-        (apply f args))
-      %)
+   (fn [middleware]
+     (if (vector? middleware)
+       (let [[f & args] middleware]
+         (fn [handler]
+           (apply f handler args)))
+       middleware))
    middlewares))
 
 (defn wrap-handler
