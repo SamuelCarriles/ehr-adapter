@@ -76,4 +76,54 @@
                            :content-type :xml
                            :headers {}}))
           result (wrapped {:method :get :url "https://api.ehr.com/Patient"})]
-      (is (= "<Patient/>" (:body result))))))
+      (is (= "<Patient/>" (:body result)))))
+  (testing "Serializes the request body correctly"
+    (let [wrapped (wrap (fn [req]
+                          {:status 200
+                           :body nil
+                           :headers {}
+                           :request req}))
+          result (wrapped {:method :post
+                           :url "https://api.ehr.com/Patient"
+                           :content-type :json
+                           :body {:name "John"
+                                  :age 30}})
+          body (get-in result [:request :body])]
+      (is (= {:name "John"
+              :age 30}
+             ((requiring-resolve 'jsonista.core/read-value)
+              body
+              @(requiring-resolve
+                'jsonista.core/keyword-keys-object-mapper))))))
+
+  (testing "Does not serialize excluded JSON media types"
+    (let [wrapped (wrap
+                   (fn [req]
+                     {:status 200
+                      :body nil
+                      :headers {}
+                      :request req})
+                   {:includes #{:custom/json}})
+          body {:name "John"}
+          result (wrapped {:method :post
+                           :url "https://api.ehr.com/Patient"
+                           :content-type :other/json
+                           :body body})]
+      (is (= body
+             (get-in result [:request :body])))))
+  (testing "Uses the configured object mapper"
+    (let [object-mapper (requiring-resolve 'jsonista.core/object-mapper)
+          mapper (object-mapper {:encode-key-fn name})
+          wrapped (wrap
+                   (fn [req]
+                     {:status 200
+                      :body nil
+                      :headers {}
+                      :request req})
+                   {:mapper mapper})
+          result (wrapped {:method :post
+                           :url "https://api.ehr.com/Patient"
+                           :content-type :json
+                           :body {:foo-bar "value"}})]
+      (is (= "{\"foo-bar\":\"value\"}"
+             (get-in result [:request :body]))))))

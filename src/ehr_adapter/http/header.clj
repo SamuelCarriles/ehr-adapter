@@ -185,7 +185,7 @@
   ([value]
    (json-media-type? value {}))
   ([value opts]
-   (let [extra (set (:includes opts))
+   (let [extra (:includes opts)
          media-types (into extra json-media-types)
          code (if (map? value) (:code value) value)]
      (contains? media-types code))))
