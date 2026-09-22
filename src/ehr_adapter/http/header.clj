@@ -6,11 +6,14 @@
 
 (def keyword-format->mime
   {:json "application/json"
-   :fhir/json "application/fhir+json"
+   :json/fhir "application/json+fhir"
+   :fhir/json "application/fhir+json" ;; for old FHIR versions like DSTU2
    :form-url-encoded "application/x-www-form-urlencoded"
    :xml "application/xml"
    :text "text/plain"
    :multipart "multipart/form-data"})
+
+(def json-media-types #{:json :json/fhir :fhir/json})
 
 (def mime->keyword-format
   (map-invert keyword-format->mime))
@@ -19,92 +22,173 @@
   "Parses a raw HTTP Content-Type header string into the internal structured
    map representation of the engine.
 
-   Always returns a map with a :code key, and optionally a :properties map
-   if parameters are present in the header or if the media type is unsupported.
+   Returns a map containing a :code key and, when present, a :properties map
+   with the parameters specified in the Content-Type header.
 
-   The returned map contains:
-   - :code        The unassigned format keyword, or :unsupported if not registered.
-   - :properties  An optional map of string key-value pairs representing parameters
-                  (e.g., charset, boundary). If the format is :unsupported, it 
-                  includes a :raw-mime key containing the original parsed media type.
+   If the media type is not registered, :code is set to :unsupported and
+   :raw-mime contains the original media type.
+
+   The one-argument arity uses the default MIME code mappings. The two-argument
+   arity accepts a map of additional MIME codes, where keys are format keywords
+   and values are MIME type strings. Custom MIME codes take precedence over
+   the default mappings.
 
    Examples:
      (parse-mime \"application/json\")
      => {:code :json}
 
      (parse-mime \"application/fhir+json; charset=utf-8\")
-     => {:code :fhir/json, :properties {\"charset\" \"utf-8\"}}
+     => {:code :fhir/json
+         :properties {\"charset\" \"utf-8\"}}
 
      (parse-mime \"application/x-custom-type; boundary=123\")
-     => {:code :unsupported, :raw-mime \"application/x-custom-type\" :properties {\"boundary\" \"123\"}}"
-  [^String s]
-  (let [[mime & props] (-> s str/trim (str/split #";"))
-        properties (map #(-> (str/trim %) (str/split #"=" 2)) props)
-        code (if-let [c (get mime->keyword-format mime)]
-               c :unsupported)]
-    (cond-> {:code code}
-      props (assoc :properties (into {} properties))
-      (= :unsupported code)
-      (assoc :raw-mime mime))))
+     => {:code :unsupported
+         :raw-mime \"application/x-custom-type\"
+         :properties {\"boundary\" \"123\"}}
+
+     (parse-mime \"application/json+fhir\"
+                 {:json/fhir \"application/json+fhir\"})
+     => {:code :json/fhir}"
+  ([^String s]
+   (parse-mime s {}))
+  ([^String s mime-codes]
+   (let [[mime & props] (-> s str/trim (str/split #";"))
+         properties (map #(-> (str/trim %) (str/split #"=" 2)) props)
+         mime-codes (merge mime->keyword-format (map-invert mime-codes))
+         code (get mime-codes mime :unsupported)]
+     (cond-> {:code code}
+       props (assoc :properties (into {} properties))
+       (= :unsupported code)
+       (assoc :raw-mime mime)))))
 
 (defn mime-error [x]
   (error/info :unsupported/mime-code
-              {:message "Unsupported mime-code. Try to use a map to define unsupported types. Example: {:code :unsupported :raw-mime \"<my-mime-code>\"}"
+              {:message "Unsupported MIME code. Add :mime-codes on :network in the AdapterConfiguration to add ohter MIME codes, or try to use a map to define unsupported types. Example: {:code :unsupported :raw-mime \"<my-mime-code>\"}"
                :scope :ehr-adapter.middleware.header
                :operation :resolve-header
                :mime-code x
                :expected (into [:unsupported] (keys keyword-format->mime))}))
 
 (defn ->mime
-  [x]
-  (cond
-    (keyword? x)
-    (if-let [mime (get keyword-format->mime x)]
-      mime
-      (throw (mime-error x)))
+  ([x]
+   (->mime x {}))
+  ([x mime-codes]
+   (cond
+     (keyword? x)
+     (if-let [mime (get (merge keyword-format->mime mime-codes) x)]
+       mime
+       (throw (mime-error x)))
 
-    (map? x)
-    (let [{:keys [code raw-mime properties]} (schema/validate-mime-code-map x)
-          unsupported? (= :unsupported code)
-          mime (if unsupported? raw-mime (->mime code))
-          full-mime-vec (reduce-kv (fn [acc k v] (conj acc (str k "=" v))) [mime] properties)]
-      (str/join "; " full-mime-vec))
+     (map? x)
+     (let [{:keys [code raw-mime properties]} (schema/validate-mime-code-map x)
+           unsupported? (= :unsupported code)
+           mime (if unsupported? raw-mime (->mime code mime-codes))
+           full-mime-vec (reduce-kv (fn [acc k v] (conj acc (str k "=" v))) [mime] properties)]
+       (str/join "; " full-mime-vec))
 
-    :else
-    (throw (error/info :invalid/format
-                       {:message "Invalid mime-code format"
-                        :scope :ehr-adapter.http.header
-                        :operation :resolve-header
-                        :value x
-                        :expected [:or :keyword [:map
-                                                 [:code :keyword]
-                                                 [:raw-mime {:optional true} :string]
-                                                 [:properties {:optional true}
-                                                  [:map-of :string :string]]]]}))))
+     :else
+     (throw (error/info :invalid/format
+                        {:message "Invalid MIME code format"
+                         :scope :ehr-adapter.http.header
+                         :operation :resolve-header
+                         :value x
+                         :expected [:or :keyword [:map
+                                                  [:code :keyword]
+                                                  [:raw-mime {:optional true} :string]
+                                                  [:properties {:optional true}
+                                                   [:map-of :string :string]]]]})))))
 
 (defn content-type
-  "Given a format keyword or Content-Type-Structured map, returns {\"Content-Type\" <mime-type>} or throws if the format is not supported."
-  [x]
-  (when-not (nil? x)
-    (if-let [mime (->mime x)]
-      {"Content-Type" mime}
-      (throw (mime-error x)))))
+  "Returns a Content-Type header map for the given format.
+
+   Accepts either a format keyword or a Content-Type-Structured map.
+   The one-argument arity uses the default MIME code mappings. The two-argument
+   arity accepts a map of additional MIME codes.
+
+   Returns nil when x is nil.
+
+   Examples:
+     (content-type :json)
+     => {\"Content-Type\" \"application/json\"}
+
+     (content-type :json/fhir
+                   {:json/fhir \"application/json+fhir\"})
+     => {\"Content-Type\" \"application/json+fhir\"}
+
+     (content-type nil)
+     => nil"
+  ([x]
+   (content-type x {}))
+  ([x mime-codes]
+   (when-not (nil? x)
+     (if-let [mime (->mime x mime-codes)]
+       {"Content-Type" mime}
+       (throw (mime-error x))))))
 
 (defn accept
-  "Given a format keyword or Content-Type-Structured map, returns {\"Accept\" <mime-type>} or throws if the format is not supported."
-  [x]
-  (when-not (nil? x)
-    (if-let [mime (->mime x)]
-      {"Accept" mime}
-      (throw (mime-error x)))))
+  "Returns an Accept header map for the given format.
 
+   Accepts either a format keyword or a Content-Type-Structured map.
+   The one-argument arity uses the default MIME code mappings. The two-argument
+   arity accepts a map of additional MIME codes.
+
+   Returns nil when x is nil.
+
+   Examples:
+     (accept :json)
+     => {\"Accept\" \"application/json\"}
+
+     (accept :fhir/json)
+     => {\"Accept\" \"application/fhir+json\"}
+
+     (accept nil)
+     => nil"
+  ([x]
+   (accept x {}))
+  ([x mime-codes]
+   (when-not (nil? x)
+     (if-let [mime (->mime x mime-codes)]
+       {"Accept" mime}
+       (throw (mime-error x))))))
+
+;; TODO: Revisar que la implementación está correcta y cambiar el doc string
 (defn json-media-type?
-  "Returns true if the given content-type value represents a JSON media type.
- Accepts either a keyword (e.g. :json, :fhir/json) or a structured map with a :code key."
-  [content-type]
-  (let [code (if (map? content-type) (:code content-type) content-type)]
-    (or (= :json code)
-        (= :fhir/json code))))
+  "Returns true if the given value represents a JSON media type.
+
+   Accepts either a format keyword or a Content-Type-Structured map with a
+   :code key.
+
+   The one-argument arity checks against the default JSON media types.
+   The two-argument arity accepts an options map. Additional JSON media types
+   can be specified with :includes. The default JSON media types are always
+   included.
+
+   Examples:
+     (json-media-type? :json)
+     => true
+
+     (json-media-type? :fhir/json)
+     => true
+
+     (json-media-type? :xml)
+     => false
+
+     (json-media-type? {:code :json})
+     => true
+
+     (json-media-type? :json+fhir
+                       {:includes #{:json+fhir}})
+     => true
+
+     (json-media-type? :json+fhir)
+     => false"
+  ([value]
+   (json-media-type? value {}))
+  ([value opts]
+   (let [extra (:includes opts)
+         media-types (into json-media-types extra)
+         code (if (map? value) (:code value) value)]
+     (contains? media-types code))))
 
 (defn authorization
   [{:keys [token token-type]}]

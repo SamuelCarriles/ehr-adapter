@@ -6,12 +6,8 @@
    [ehr-adapter.http.header :refer [authorization]]
    [ehr-adapter.operation :as op]
    [ehr-adapter.reference.core :refer [check partial-resolve]]
+   [ehr-adapter.middleware.core :as midd]
    [ehr-adapter.error :as error]))
-
-(defn wrap-handler
-  [{:keys [request-handler middlewares]}]
-  (let [wrapper (apply comp (reverse middlewares))]
-    (wrapper request-handler)))
 
 (defn initialize
   "Builds and validates an adapter instance ready for use from a configuration map.
@@ -32,7 +28,7 @@
   ([ctx adapter-config]
    (let [partial-resolved-cfg (->> adapter-config check (partial-resolve ctx) schema/validate-adapter-config)
          {:keys [domain base-url auth network operations]} partial-resolved-cfg
-         wrapped-handler (-> (wrap-handler network)
+         wrapped-handler (-> (midd/wrap-handler network)
                              (net/with-retries network)
                              (net/with-client network))
 
