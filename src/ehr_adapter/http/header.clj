@@ -6,6 +6,7 @@
 
 (def keyword-format->mime
   {:json "application/json"
+   :json/fhir "application/json+fhir"
    :fhir/json "application/fhir+json"
    :form-url-encoded "application/x-www-form-urlencoded"
    :xml "application/xml"
