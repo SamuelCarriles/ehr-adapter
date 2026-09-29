@@ -104,8 +104,7 @@
  Accepts either a keyword (e.g. :json, :fhir/json) or a structured map with a :code key."
   [content-type]
   (let [code (if (map? content-type) (:code content-type) content-type)]
-    (or (= :json code)
-        (= :fhir/json code))))
+    (contains? #{:json :fhir/json :json/fhir} code)))
 
 (defn authorization
   [{:keys [token token-type]}]
